@@ -1,0 +1,18 @@
+{
+   "application": "{{displayName}}",
+   "id": "SYNO.SDS.{{dsmAppName}}.Instance",
+   "alias": "{{id}}",
+   "fqdn": "",
+   "https": {
+       "hsts": false,
+       "http2": false
+   },
+   "alternatePort": {
+     "http": 0,
+     "https": 0
+   },
+   "injectable": false,
+   "index": "index.cgi",
+   "root": "/usr/syno/synoman",
+   "version": 2
+}

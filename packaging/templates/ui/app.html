@@ -1,0 +1,293 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{displayName}}</title>
+  <style>
+    :root { color-scheme: light; }
+    html, body { height: 100%; margin: 0; background: #f4f6f8; }
+    #frame { display: none; width: 100%; height: 100%; border: 0; }
+    #state { display: grid; place-items: center; height: 100%; padding: 24px; box-sizing: border-box;
+      font: 14px/1.5 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif; color: #3c4554; }
+    .card { max-width: 420px; text-align: center; }
+    .icon { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 14px; display: block; }
+    h1 { margin: 0 0 6px; font-size: 16px; font-weight: 600; color: #1f2a37; }
+    p { margin: 0 0 4px; color: #5b6676; }
+    .detail { margin-top: 10px; font-size: 12px; color: #8a94a3; overflow-wrap: anywhere; }
+    .spinner { width: 22px; height: 22px; margin: 18px auto 0; border-radius: 50%;
+      border: 3px solid #d7dde5; border-top-color: #057feb; animation: spin 0.9s linear infinite; }
+    .actions { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
+    button { font: inherit; font-size: 13px; padding: 7px 16px; border-radius: 4px; cursor: pointer;
+      border: 1px solid #c6ced8; background: #fff; color: #1f2a37; }
+    button.primary { background: #057feb; border-color: #057feb; color: #fff; }
+    button:focus-visible { outline: 2px solid #057feb; outline-offset: 2px; }
+    button[disabled] { opacity: 0.6; cursor: default; }
+    [hidden] { display: none !important; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+  </style>
+</head>
+<body>
+  <div id="state" role="status" aria-live="polite">
+    <div class="card">
+      <img class="icon" src="images/app_256.png" alt="">
+      <h1 id="title"></h1>
+      <p id="message"></p>
+      <div id="spinner" class="spinner" aria-hidden="true"></div>
+      <div class="actions">
+        <button id="start" class="primary" type="button" hidden></button>
+        <button id="restart" type="button" hidden></button>
+        <button id="retry" type="button" hidden></button>
+      </div>
+      <p id="detail" class="detail" hidden></p>
+    </div>
+  </div>
+  <iframe id="frame" title="{{displayName}}" allow="autoplay; fullscreen; clipboard-write"></iframe>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var token = params.get("SynoToken") || "";
+      var els = {
+        state: document.getElementById("state"),
+        title: document.getElementById("title"),
+        message: document.getElementById("message"),
+        spinner: document.getElementById("spinner"),
+        detail: document.getElementById("detail"),
+        start: document.getElementById("start"),
+        retry: document.getElementById("retry"),
+        restart: document.getElementById("restart"),
+        frame: document.getElementById("frame"),
+      };
+      var NAME = "{{displayName}}";
+      var TEXTS = {{texts}};
+      // The DSM window passes the user's DSM language; a browser tab falls back to its own.
+      var LANG = params.get("lang")
+        || (/^de\b/i.test(navigator.language || "") ? "ger" : "enu");
+      var STRINGS = TEXTS[LANG] || TEXTS.enu;
+      document.documentElement.lang = LANG === "ger" ? "de" : "en";
+      var generation = 0;
+      var lastLogin = 0;
+
+      function t(key, values) {
+        var text = STRINGS[key] || TEXTS.enu[key] || key;
+        values = values || {};
+        return text.replace(/\{(\w+)\}/g, function (match, name) {
+          return name === "app" ? NAME : (name in values ? values[name] : match);
+        });
+      }
+
+      els.start.textContent = t("start");
+      els.restart.textContent = t("restart");
+      els.retry.textContent = t("retry");
+
+      // Short, human explanations instead of raw helper codes.
+      var ERRORS = {
+        auth: "error.auth",
+        denied: "error.denied",
+        admin: "error.admin",
+        token: "error.token",
+        origin: "error.origin",
+        bridge: "error.bridge",
+        "bridge-port": "error.install",
+        "bridge-token": "error.install",
+      };
+
+      function api(path, options) {
+        options = options || {};
+        var headers = { "X-SynoToken": token };
+        if (options.body) headers["Content-Type"] = "application/json";
+        var url = path + (path.indexOf("?") >= 0 ? "&" : "?") + "SynoToken=" + encodeURIComponent(token);
+        return fetch(url, {
+          method: options.method || "GET",
+          headers: headers,
+          body: options.body ? JSON.stringify(options.body) : undefined,
+          cache: "no-store",
+          credentials: "same-origin",
+        }).then(function (response) {
+          return response.json().catch(function () {
+            return { error: "bridge" };
+          }).then(function (data) {
+            if (!response.ok || data.error) {
+              var error = new Error(data.error || ("HTTP " + response.status));
+              error.code = data.error || "";
+              throw error;
+            }
+            return data;
+          });
+        });
+      }
+
+      function explain(error) {
+        var key = ERRORS[error && error.code];
+        return key ? t(key) : t("unknownError");
+      }
+
+      function show(view) {
+        els.frame.style.display = "none";
+        els.state.style.display = "grid";
+        els.title.textContent = view.title;
+        els.message.textContent = view.message || "";
+        els.spinner.hidden = !view.busy;
+        els.detail.hidden = !view.detail;
+        els.detail.textContent = view.detail || "";
+        els.start.hidden = !view.start;
+        els.start.disabled = false;
+        els.retry.hidden = !view.retry;
+        els.restart.hidden = !view.restart;
+        els.restart.disabled = false;
+      }
+
+      function sleep(ms) {
+        return new Promise(function (resolve) { setTimeout(resolve, ms); });
+      }
+
+      // Waits until the app answers, describing what is happening in the meantime. Each call gets
+      // a generation number so a newer attempt (retry, restart, re-login) cancels older loops.
+      function waitForApp(mine, startedAt) {
+        return api("status.cgi").then(function (status) {
+          if (mine !== generation) return null;
+          if (status.state === "running" && status.reachable) return status;
+          var seconds = Math.round((Date.now() - startedAt) / 1000);
+          if (status.state === "exited" || status.state === "created" || status.state === "dead"
+              || status.state === "missing") {
+            show({
+              title: t("notRunning"),
+              message: t(status.isAdmin ? "stoppedAdmin" : "stoppedUser"),
+              start: status.isAdmin,
+              retry: !status.isAdmin,
+              detail: status.state === "missing" ? t("missing") : "",
+            });
+            return null;
+          }
+          if (seconds > 120) {
+            show({
+              title: t("slow"),
+              message: t(status.state === "running" ? "slowRunning" : "slowState"),
+              busy: true,
+              retry: true,
+              // A hung app is the one case where a restart helps; offer it right here.
+              restart: status.isAdmin && status.state === "running",
+              detail: t("slowDetail"),
+            });
+          } else {
+            show({
+              title: t("starting"),
+              message: t(status.state === "running" ? "waitingAnswer" : "startingApp"),
+              busy: true,
+            });
+          }
+          return sleep(1500).then(function () { return waitForApp(mine, startedAt); });
+        }, function (error) {
+          if (mine !== generation) return null;
+          if (error.code === "bridge" && Date.now() - startedAt < 90000) {
+            // the helper container restarts with the package; give it a moment
+            show({ title: t("starting"), message: t("waitingHelper"), busy: true });
+            return sleep(2000).then(function () { return waitForApp(mine, startedAt); });
+          }
+          throw error;
+        });
+      }
+
+      function open(reason) {
+        var mine = ++generation;
+        var titles = { restart: t("restarting"), start: t("starting") };
+        var messages = { restart: t("restartingApp"), start: t("startingApp") };
+        show({
+          title: titles[reason] || t("opening"),
+          message: messages[reason] || t("connecting"),
+          busy: true,
+        });
+        return waitForApp(mine, Date.now()).then(function (status) {
+          if (!status || mine !== generation) return;
+          return login(mine);
+        }).catch(function (error) {
+          if (mine !== generation) return;
+          show({ title: t("couldNotOpen"), message: explain(error), retry: true });
+        });
+      }
+
+      function login(mine) {
+        lastLogin = Date.now();
+        return api("session.cgi").then(function (session) {
+          if (mine !== generation) return;
+          els.frame.src = "proxy/__bridge_login?token=" + encodeURIComponent(session.token);
+          els.frame.style.display = "block";
+          els.state.style.display = "none";
+        });
+      }
+
+      // The bridge trusts a session only for a while after DSM last granted the app. While the
+      // app is open, re-check in the background so nobody is interrupted, and close the app as
+      // soon as an administrator takes the privilege away.
+      setInterval(function () {
+        if (els.frame.style.display !== "block") return;
+        api("session.cgi").then(function (session) {
+          return fetch("proxy/__bridge_refresh?token=" + encodeURIComponent(session.token),
+            { cache: "no-store", credentials: "same-origin" });
+        }).catch(function (error) {
+          if (error.code === "denied" || error.code === "auth") {
+            generation++;
+            els.frame.src = "about:blank";
+            show({ title: t("couldNotOpen"), message: explain(error), retry: true });
+          }
+        });
+      }, 10 * 60 * 1000);
+
+      els.retry.addEventListener("click", function () { open("open"); });
+      els.restart.addEventListener("click", function () {
+        els.restart.disabled = true;
+        generation++;
+        show({ title: t("restarting"), message: t("stopping"), busy: true });
+        api("settings.cgi", { method: "POST", body: { restart: true } })
+          .then(function () { return open("restart"); })
+          .catch(function (error) {
+            show({ title: t("couldNotRestart"), message: explain(error), retry: true });
+          });
+      });
+      els.start.addEventListener("click", function () {
+        els.start.disabled = true;
+        show({ title: t("starting"), message: t("startingApp"), busy: true });
+        api("settings.cgi", { method: "POST", body: { restart: true } })
+          .then(function () { return open("start"); })
+          .catch(function (error) {
+            show({ title: t("couldNotStart"), message: explain(error), retry: true });
+          });
+      });
+
+      // Messages from the embedded app (same origin) and from the DSM window toolbar.
+      window.addEventListener("message", function (event) {
+        if (event.origin !== window.location.origin || !event.data) return;
+        var type = event.data.type;
+        if (type === "bridge:reauth") {
+          // The bridge session ended (idle timeout or a bridge restart). The user is still signed
+          // in to DSM, so mint a new session instead of showing a sign-in page. A loop guard keeps
+          // a broken session from reloading forever.
+          if (Date.now() - lastLogin < 15000) {
+            show({ title: t("couldNotOpen"), message: t("error.auth"), retry: true });
+            return;
+          }
+          var mine = ++generation;
+          login(mine).catch(function (error) {
+            show({ title: t("couldNotOpen"), message: explain(error), retry: true });
+          });
+        } else if (type === "bridge:busy") {
+          // A change is being applied; hold this state without polling until the window says
+          // the app is coming back, so the old instance is not reopened just before it stops.
+          generation++;
+          show({ title: event.data.title || t("restarting"),
+            message: event.data.message || t("applying"), busy: true });
+        } else if (type === "bridge:unavailable") {
+          open("open");
+        } else if (type === "bridge:restarting") {
+          open("restart");
+        } else if (type === "bridge:reload") {
+          open("open");
+        }
+      });
+
+      open("open");
+    })();
+  </script>
+</body>
+</html>

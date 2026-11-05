@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Synology Docker Bridge app config",
+  "description": "Input for packaging/generate.mjs. Only id, version, displayName, description, maintainer, image and an icon are required; everything else has a default.",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "displayName",
+    "description",
+    "maintainer",
+    "image"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "icon"
+      ]
+    },
+    {
+      "required": [
+        "icons"
+      ]
+    }
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Package name, also the share, container and Login Portal alias."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)*(-[0-9]+)?$"
+    },
+    "displayName": {
+      "$ref": "#/$defs/plainText"
+    },
+    "displayNameGer": {
+      "$ref": "#/$defs/plainText",
+      "description": "German name; defaults to displayName."
+    },
+    "description": {
+      "$ref": "#/$defs/plainText"
+    },
+    "descriptionGer": {
+      "$ref": "#/$defs/plainText",
+      "description": "German Package Center description; defaults to description."
+    },
+    "maintainer": {
+      "$ref": "#/$defs/plainText"
+    },
+    "dsmAppName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+      "description": "DSM class name part; derived from id (my-app -> MyApp)."
+    },
+    "arch": {
+      "enum": [
+        "x86_64",
+        "amd64",
+        "armv8",
+        "arm64"
+      ],
+      "default": "x86_64"
+    },
+    "appDir": {
+      "type": "string",
+      "description": "Directory for appBuild and icon paths, relative to this file."
+    },
+    "image": {
+      "type": "string",
+      "description": "Local app image tag to embed."
+    },
+    "appBuild": {
+      "type": "string",
+      "description": "Shell command run in appDir that builds image."
+    },
+    "icon": {
+      "type": "string",
+      "description": "One square SVG; every DSM icon size is drawn from it (needs rsvg-convert)."
+    },
+    "icons": {
+      "type": "string",
+      "description": "Folder with app_{16,24,32,48,64,72,256}.png and PACKAGE_ICON*.PNG."
+    },
+    "container": {
+      "type": "string",
+      "description": "Container name; defaults to id."
+    },
+    "service": {
+      "type": "string",
+      "default": "app"
+    },
+    "containerPort": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "Port the app listens on in its container."
+    },
+    "internalPort": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535,
+      "description": "Localhost port the bridge proxies to; derived from id."
+    },
+    "networkMode": {
+      "enum": [
+        "bridge",
+        "host"
+      ],
+      "default": "bridge"
+    },
+    "appPath": {
+      "type": "string",
+      "default": "/",
+      "description": "Web path of the app's UI."
+    },
+    "appUser": {
+      "type": "string",
+      "description": "User the app runs as; defaults to the image's own."
+    },
+    "appEnv": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
+    "dataDir": {
+      "type": "string",
+      "description": "Host folder mounted at /data; defaults to the package's own share, on whichever volume."
+    },
+    "output": {
+      "type": "boolean",
+      "default": true,
+      "description": "false: the app writes nothing to a share; no folder setting, no share mount."
+    },
+    "outputLabel": {
+      "description": "What the folder is called, as text or per DSM language.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/plainText"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "enu": {
+              "$ref": "#/$defs/plainText"
+            },
+            "ger": {
+              "$ref": "#/$defs/plainText"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "outputParent": {
+      "type": "string",
+      "description": "Older form of outputShare: its last path part is the share name."
+    },
+    "defaultOutputDir": {
+      "type": "string",
+      "description": "Older form of outputSubdir: its last path part is the folder name."
+    },
+    "outputSubdir": {
+      "type": "string",
+      "description": "First folder inside the share; defaults to id."
+    },
+    "allUsers": {
+      "type": "boolean",
+      "default": false,
+      "description": "true: every DSM user may open the app without an Application Privileges entry."
+    },
+    "authMode": {
+      "enum": [
+        "token",
+        "none"
+      ],
+      "default": "token"
+    },
+    "identityHeaders": {
+      "type": "boolean",
+      "default": false,
+      "description": "Pass the DSM user as Remote-User and Remote-Groups."
+    },
+    "sessionSeconds": {
+      "type": "integer",
+      "minimum": 60,
+      "default": 28800
+    },
+    "oneTimeSeconds": {
+      "type": "integer",
+      "minimum": 10,
+      "default": 60
+    },
+    "bridgeImage": {
+      "type": "string"
+    },
+    "controlPort": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputShare": {
+      "type": "string",
+      "default": "music",
+      "description": "Shared folder the folder lives in. DSM creates it when missing (an existing share keeps its permissions) and the package finds it on any volume."
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "plainText": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\"\\\\<>\\n]*$"
+    }
+  }
+}

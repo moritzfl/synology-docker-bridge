@@ -1,0 +1,17 @@
+{
+  "name": "@moritzf/dsm-docker-bridge",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Generic Synology DSM bridge for Docker web UIs",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "http-proxy": "^1.18.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

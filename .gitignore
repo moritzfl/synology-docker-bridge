@@ -1,0 +1,5 @@
+node_modules/
+packaging/dist/
+.playwright-cli/
+.DS_Store
+.idea/

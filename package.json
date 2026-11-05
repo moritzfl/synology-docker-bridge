@@ -1,0 +1,13 @@
+{
+  "name": "synology-docker-bridge",
+  "private": true,
+  "type": "module",
+  "description": "Generic SPK generator and runtime for Docker web UIs as DSM desktop apps",
+  "scripts": {
+    "test": "node --test bridge/test packaging/test",
+    "check": "node packaging/generate.mjs --check --config"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

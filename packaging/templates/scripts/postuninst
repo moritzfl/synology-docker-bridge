@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+VAR="${SYNOPKG_PKGVAR:-/var/packages/{{id}}/var}"
+rm -f "$VAR/token" "$VAR/bridge-port"
+exit 0

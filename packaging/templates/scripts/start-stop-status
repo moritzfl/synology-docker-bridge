@@ -1,0 +1,47 @@
+#!/bin/sh
+set -eu
+
+DEST="${SYNOPKG_PKGDEST:-/var/packages/{{id}}/target}"
+ENV_FILE="$DEST/docker/.env"
+APP_CONTAINER="$(sed -n 's/^APP_CONTAINER=//p' "$ENV_FILE" 2>/dev/null | head -1)"
+[ -n "$APP_CONTAINER" ] || APP_CONTAINER="{{container}}"
+BRIDGE_CONTAINER="$APP_CONTAINER-bridge"
+
+running() {
+    [ -x /usr/local/bin/docker_inspect ] || return 1
+    /usr/local/bin/docker_inspect "$1" 2>/dev/null | grep -q '"Status": "running"'
+}
+
+case "${1:-}" in
+    start)
+        # Container Manager starts the docker project asynchronously. Give it a
+        # moment, but never fail the package start: DSM would mark the package
+        # broken and refuse to launch the desktop window.
+        i=0
+        while [ "$i" -lt 20 ]; do
+            if running "$APP_CONTAINER" && running "$BRIDGE_CONTAINER"; then
+                exit 0
+            fi
+            i=$((i + 1))
+            sleep 3
+        done
+        echo "Containers are still starting; Container Manager will finish the job." >&2
+        exit 0
+        ;;
+    stop)
+        exit 0
+        ;;
+    status)
+        if running "$APP_CONTAINER" && running "$BRIDGE_CONTAINER"; then
+            exit 0
+        fi
+        exit 3
+        ;;
+    log)
+        exit 0
+        ;;
+    *)
+        echo "usage: $0 {start|stop|status|log}" >&2
+        exit 1
+        ;;
+esac

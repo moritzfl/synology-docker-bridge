@@ -1,0 +1,58 @@
+services:
+  {{service}}:
+    image: ${APP_IMAGE:-{{image}}}
+    container_name: ${APP_CONTAINER:-{{container}}}
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      - bridge
+{{networkMode}}
+{{ports}}
+{{appUser}}
+    environment:
+{{appEnvironment}}
+    volumes:
+      - ${APP_DATA_DIR:-{{dataDirDefault}}}:/data
+{{appOutputVolume}}
+
+  bridge:
+    image: ${BRIDGE_IMAGE:-{{bridgeImage}}}
+    container_name: ${APP_CONTAINER:-{{container}}}-bridge
+    pull_policy: never
+    restart: unless-stopped
+    network_mode: host
+    # Root is required for docker.sock and for the output symlink in the share. The bridge talks
+    # to the Engine API directly; /compose only carries the .env that Container Manager reads.
+    user: "root"
+    environment:
+      BRIDGE_TOKEN_FILE: /run/bridge/token
+      BRIDGE_CONTROL_PORT: ${BRIDGE_CONTROL_PORT:-{{controlPort}}}
+      BRIDGE_CONTAINER: ${APP_CONTAINER:-{{container}}}
+      BRIDGE_ENV_FILE: /compose/.env
+      BRIDGE_STATE_ENV: /run/bridge/app.env
+      BRIDGE_OUTPUT_KEY: APP_OUTPUT_DIR
+      BRIDGE_OUTPUT_CONTAINER_KEY: APP_OUTPUT_CONTAINER_DIR
+      BRIDGE_OUTPUT_CONTAINER_ROOT: {{outputContainerRoot}}
+      BRIDGE_OUTPUT_LINK: {{outputLink}}
+      BRIDGE_CONTAINER_MANAGER_DIR: /container-manager
+      BRIDGE_IMAGE_STATE: /run/bridge/images.json
+      BRIDGE_INTERNAL_PORT: ${APP_INTERNAL_PORT:-{{hostPort}}}
+      BRIDGE_ALLOWED_ROOT: {{outputParent}}
+      BRIDGE_SHARE_LINK: /run/shares/{{outputShare}}
+      BRIDGE_OUTPUT_SUBDIR: "{{outputSubdir}}"
+      BRIDGE_HOST_ROOT: {{outputHostRoot}}
+      BRIDGE_DEFAULT_OUTPUT_DIR: {{defaultOutputDir}}
+      BRIDGE_APP_TITLE: {{appTitle}}
+      BRIDGE_APP_PATH: "{{appPath}}"
+      BRIDGE_AUTH: "{{authMode}}"
+      BRIDGE_OUTPUT: "{{showOutput}}"
+      BRIDGE_IDENTITY_HEADERS: "{{identityHeaders}}"
+      BRIDGE_FRAMEWORK_VERSION: "{{frameworkVersion}}"
+      BRIDGE_ONE_TIME_SECONDS: "{{oneTimeSeconds}}"
+      BRIDGE_SESSION_SECONDS: "{{sessionSeconds}}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/packages/{{id}}/target/docker:/compose
+      - /var/packages/{{id}}/var:/run/bridge
+      - /var/packages/ContainerManager/etc:/container-manager
+{{bridgeOutputVolume}}

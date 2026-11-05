@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+LOG="${SYNOPKG_TEMP_LOGFILE:-/dev/stderr}"
+if [ ! -x /usr/local/bin/docker_inspect ]; then
+    echo "Container Manager is required. Install it from Package Center first." >>"$LOG"
+    exit 1
+fi
+exit 0

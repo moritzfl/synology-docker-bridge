@@ -1,0 +1,95 @@
+#!/bin/sh
+# Shared runtime configuration for install/upgrade. Sourced, not executed.
+
+PKG="{{id}}"
+DEST="${SYNOPKG_PKGDEST:-/var/packages/$PKG/target}"
+VAR="${SYNOPKG_PKGVAR:-/var/packages/$PKG/var}"
+ENV_FILE="$DEST/docker/.env"
+STATE_ENV="$VAR/app.env"
+TOKEN_FILE="$VAR/token"
+CONTROL_FILE="$VAR/bridge-port"
+
+valid_port() {
+    case "${1:-}" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ "$1" -ge 1024 ] && [ "$1" -le 65535 ]
+}
+
+
+ensure_token() {
+    mkdir -p "$VAR"
+    if [ ! -s "$TOKEN_FILE" ]; then
+        dd if=/dev/urandom bs=32 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n' >"$TOKEN_FILE"
+        chmod 600 "$TOKEN_FILE"
+    fi
+}
+
+ensure_control_port() {
+    saved="$(cat "$CONTROL_FILE" 2>/dev/null || true)"
+    if valid_port "$saved"; then
+        return
+    fi
+    default="$(sed -n 's/^BRIDGE_CONTROL_PORT=//p' "$ENV_FILE" 2>/dev/null | head -1)"
+    valid_port "$default" || default=8799
+    printf '%s\n' "$default" >"$CONTROL_FILE"
+}
+
+set_env() {
+    key="$1"
+    value="$2"
+    if grep -q "^$key=" "$ENV_FILE" 2>/dev/null; then
+        tmp="$ENV_FILE.tmp.$$"
+        awk -v key="$key" -v value="$value" '
+            BEGIN { FS = "=" }
+            $1 == key { print key "=" value; next }
+            { print }
+        ' "$ENV_FILE" >"$tmp" && mv "$tmp" "$ENV_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
+    fi
+}
+
+unset_env() {
+    [ -f "$ENV_FILE" ] || return 0
+    tmp="$ENV_FILE.tmp.$$"
+    grep -v "^$1=" "$ENV_FILE" >"$tmp" || true
+    mv "$tmp" "$ENV_FILE"
+}
+
+get_env() {
+    sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | head -1
+}
+
+ensure_env() {
+    mkdir -p "$DEST/docker" "$VAR"
+    if [ -f "$STATE_ENV" ]; then
+        cp "$STATE_ENV" "$ENV_FILE"
+    fi
+    if [ ! -f "$ENV_FILE" ]; then
+        : >"$ENV_FILE"
+    fi
+
+    saved_output="$(get_env APP_OUTPUT_DIR)"
+    saved_internal="$(get_env APP_INTERNAL_PORT)"
+    saved_container_port="$(get_env APP_CONTAINER_PORT)"
+
+    # Earlier versions could open a direct bridge port; the app is now on DSM's ports only.
+    unset_env APP_PORT
+    set_env APP_IMAGE "{{image}}"
+    set_env BRIDGE_IMAGE "{{bridgeImage}}"
+    set_env APP_CONTAINER "{{container}}"
+    set_env APP_DATA_DIR "{{dataDirDefault}}"
+    set_env APP_INTERNAL_PORT "${saved_internal:-{{hostPort}}}"
+    set_env APP_CONTAINER_PORT "${saved_container_port:-{{containerPort}}}"
+    set_env BRIDGE_CONTROL_PORT "$(cat "$CONTROL_FILE")"
+    # The bridge finds the share's real volume when it starts; these are only the defaults.
+    set_env APP_OUTPUT_PARENT "{{outputParent}}"
+    set_env APP_OUTPUT_DIR "${saved_output:-{{defaultOutputDir}}}"
+    set_env APP_OUTPUT_CONTAINER_DIR "{{outputContainerRoot}}/{{outputLink}}"
+}
+
+save_env() {
+    cp "$ENV_FILE" "$STATE_ENV"
+    chmod 600 "$STATE_ENV" 2>/dev/null || true
+}

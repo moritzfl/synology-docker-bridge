@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+. "$(dirname "$0")/bridge-env"
+
+ensure_token
+ensure_control_port
+ensure_env
+save_env
+exit 0

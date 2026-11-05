@@ -1,0 +1,20 @@
+{
+  "bridge.js": {
+    "SYNO.SDS.{{dsmAppName}}.Instance": {
+      "type": "app",
+      "version": "{{version}}-ui1",
+      "title": "{{displayName}}",
+      "desc": "{{description}}",
+      "icon": "images/app_{0}.png",
+      "allowMultiInstance": false,
+      "allUsers": {{allUsers}},
+      "appWindow": "SYNO.SDS.{{dsmAppName}}.Main"
+    },
+    "SYNO.SDS.{{dsmAppName}}.Main": {
+      "type": "lib",
+      "depend": ["SYNO.SDS.Utils.FileChooser.Chooser"],
+      "title": "{{displayName}}",
+      "icon": "images/app_{0}.png"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+. "$(dirname "$0")/bridge-env"
+
+if [ -f "$ENV_FILE" ]; then
+    cp "$ENV_FILE" "$STATE_ENV"
+fi
+exit 0

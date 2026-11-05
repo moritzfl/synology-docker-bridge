@@ -1,0 +1,34 @@
+{
+  "data-share": {
+    "shares": [
+      {
+        "name": "{{id}}",
+        "permission": {},
+        "once": true
+      }{{outputShareResource}}
+    ]
+  },
+  "docker-project": {
+    "preload-image": "image.tar",
+    "projects": [
+      {
+        "name": "{{id}}",
+        "path": "docker"
+      }
+    ]
+  },
+  "web-config": {
+    "app-portal": {
+      "json-relpath": "config/{{id}}.json",
+      "mustache-relpath": "config/{{id}}.mustache"
+    },
+    "nginx-static-config": {
+      "enable": [
+        {
+          "type": "dsm",
+          "relpath": "config/dsm.bridge.conf"
+        }
+      ]
+    }
+  }
+}

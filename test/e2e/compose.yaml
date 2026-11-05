@@ -1,0 +1,20 @@
+name: synology-docker-bridge-e2e
+services:
+  dsm:
+    image: ${DSM_IMAGE:-vdsm/virtual-dsm:7.65}
+    environment:
+      DISK_SIZE: "16G"
+      URL: "https://global.synologydownload.com/download/DSM/release/7.2.2/72806/DSM_VirtualDSM_72806.pat"
+      RAM_SIZE: "2G"
+      CPU_CORES: "2"
+      KVM: "N"
+      NETWORK: "user"
+      USER_PORTS: "8080"
+    ports:
+      - "127.0.0.1:15001:5000"
+      - "127.0.0.1:15002:5001"
+    volumes:
+      - dsm:/storage
+    stop_grace_period: 2m
+volumes:
+  dsm:

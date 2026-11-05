@@ -1,0 +1,12 @@
+{
+  "name": "synology-docker-bridge-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Installs packages in a real Virtual DSM and drives their windows",
+  "scripts": {
+    "round": "node round.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}
