@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "description": "Installs packages in a real Virtual DSM and drives their windows",
+  "license": "Apache-2.0",
   "scripts": {
     "round": "node round.mjs"
   },

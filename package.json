@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "description": "Generic SPK generator and runtime for Docker web UIs as DSM desktop apps",
+  "license": "Apache-2.0",
   "scripts": {
     "test": "node --test bridge/test packaging/test",
     "check": "node packaging/generate.mjs --check --config"

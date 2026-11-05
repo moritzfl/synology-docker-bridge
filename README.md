@@ -248,3 +248,7 @@ component. Its control API binds `127.0.0.1` only and requires a bearer token fr
   DSM-internal; re-run the round for each DSM version you target.
 - Real phones: the Home Screen name and icon are checked in an emulated iPhone; check a real one
   when it matters.
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).

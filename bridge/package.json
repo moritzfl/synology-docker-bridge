@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Generic Synology DSM bridge for Docker web UIs",
+  "license": "Apache-2.0",
   "scripts": {
     "start": "node src/server.mjs",
     "test": "node --test"
