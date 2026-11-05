@@ -19,6 +19,14 @@ DSM desktop icon                       Login Portal address (phones, browser tab
                       └─ bridge proxy ──► 127.0.0.1:<internal-port>
 ```
 
+## Example: AirPlay Capture in DSM
+
+This is [AirPlay Capture](https://github.com/moritzfl/airplay-capture), packaged with this bridge
+and running in DSM 7.2.2. The application fills a normal DSM desktop window; the bridge adds only
+the native window chrome and the administrator's **Manage** menu.
+
+![AirPlay Capture running in a DSM desktop window](docs/images/airplay-capture-dsm-window.png)
+
 ## Why a proxy instead of publishing the app directly?
 
 - The user never sees a port, a certificate warning, or a second URL. The app behaves like a
@@ -107,6 +115,11 @@ and reports it in its status.
 
 ## What the user sees
 
+In AirPlay Capture, administrators change the recordings folder through a native DSM dialog,
+including moving existing files, without touching Compose or a terminal.
+
+![AirPlay Capture's recordings-folder dialog in DSM](docs/images/airplay-capture-dsm-folder.png)
+
 The window is meant to behave like a first-party DSM app, so the bridge never shows a raw port,
 container state or helper error code. Every text is in the user's DSM language (English or
 German).
@@ -152,6 +165,14 @@ Applications**. The app is then at `https://<nas>:<dsm-port>/<id>/`:
   resize event for that change, so the window follows the page size itself.
 - The alias can also get its own port or host name in Control Panel; that is DSM's setting, not
   the package's.
+
+The same AirPlay Capture package through DSM Login Portal on an iPhone:
+
+<img
+  src="docs/images/airplay-capture-dsm-mobile.png"
+  alt="AirPlay Capture using DSM Login Portal on an iPhone"
+  width="393"
+/>
 
 ## Who can open the app
 
