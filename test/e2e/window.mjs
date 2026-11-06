@@ -32,6 +32,13 @@ try {
     return response.json();
   });
   const hasOutput = 'outputDir' in status;
+  // Apps running as the package user also offer Folder access, so they get the Manage menu too.
+  const access = await wrapperFrame(page, id).evaluate(async () => {
+    const token = new URLSearchParams(location.search).get('SynoToken');
+    const response = await fetch(`access.cgi?SynoToken=${encodeURIComponent(token)}`, { headers: { 'X-SynoToken': token } });
+    return response.json();
+  });
+  const hasMenu = hasOutput || (access.folders || []).length > 0;
   log(`status: ${status.state}, reachable ${status.reachable}, framework ${status.framework || '?'}, output ${hasOutput}`);
 
   // 2. window chrome: no help, one admin control
@@ -40,10 +47,13 @@ try {
     els.filter((el) => el.offsetParent).map((el) => el.getAttribute('aria-label') || el.className));
   check('no help button', !tools.some((tool) => /help/i.test(tool)), tools.join(', '));
   const toolbar = (await win.locator('.x-toolbar').first().innerText().catch(() => '')).trim().replace(/\s+/g, ' ');
-  check('admin toolbar', hasOutput ? toolbar === 'Manage' : toolbar === 'Open on phones…', toolbar);
+  await page.waitForTimeout(1000);
+  const title = (await win.locator('.x-window-header-text').first().innerText().catch(() => '')).trim();
+  check('the title names no state once the app is shown', !title.includes('·'), title);
+  check('admin toolbar', hasMenu ? toolbar === 'Manage' : toolbar === 'Open on phones…', toolbar);
 
   async function menuItem(text) {
-    if (hasOutput) {
+    if (hasMenu) {
       await win.locator('.x-toolbar button', { hasText: 'Manage' }).click();
       await page.locator('.x-menu:visible .x-menu-item', { hasText: text }).click();
     } else {

@@ -35,6 +35,7 @@ second package adds the side-by-side session check. The round:
 | --- | --- |
 | `install.mjs <spk>...` | Uploads to the volume (not the guest's small `/tmp`), verifies the checksum, `synopkg install`, waits for both containers |
 | `window.mjs <id> <class>` | As administrator: no help button, the one admin control, the folder hint and rejection, moving the folder there and back, the phone dialog (turns the Login Portal address on), a hung app's Restart, silent re-login after the bridge restarts, Start for a stopped app, no page errors |
+| `access.mjs <id> <class>` | For apps running as the package user: Folder access lists the app's folders as that user sees them and opens by itself when one is closed; each opens DSM's own permission dialog on the package user; granting Read/Write there and saving turns the row to Read and write and lets the app write. Adds and removes only its own permission entry |
 | `rights.mjs <id> <class> [<id2> <class2>]` | Per-package cookies side by side; a non-admin user without the privilege is refused, also by URL; granted, the app opens and `Remote-User` names them while forged headers are dropped; revoked, the next open is refused and the open session ends on its re-check; German for a German browser |
 | `portal.mjs <id>` | The Login Portal address on desktop Chrome and an iPhone: the app on its own, the window as wide as the device, the app's Home Screen icon, Sign Out in the account menu |
 

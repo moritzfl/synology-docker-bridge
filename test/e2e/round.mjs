@@ -24,6 +24,7 @@ run('install', 'install.mjs', spks);
 log(`listeners: ${guest("netstat -ltnp 2>/dev/null | grep node | awk '{print $4}' | tr '\\n' ' '").trim()}`);
 for (const pkg of packages) {
   run(`window ${pkg.id}`, 'window.mjs', [pkg.id, pkg.app]);
+  run(`access ${pkg.id}`, 'access.mjs', [pkg.id, pkg.app]);
 }
 const [first, second] = packages;
 const pair = second ? [second.id, second.app] : [];
