@@ -62,7 +62,22 @@
     "phoneOffFailed": "The address could not be turned off: {reason}",
     "phoneButton": "Open on phones…",
     "manage": "Manage",
-    "close": "Close"
+    "close": "Close",
+    "accessMenu": "Folder access…",
+    "accessTitle": "Folder access",
+    "accessIntro": "{app} runs as the system internal user {user} and can only use folders that this user may access. Selecting a folder does not grant access.",
+    "accessData": "App data",
+    "accessOk": "Read and write",
+    "accessReadOnly": "Read only",
+    "accessNone": "No access",
+    "accessMissing": "Folder does not exist",
+    "accessPermissions": "Permissions…",
+    "accessPermissionsOf": "Permissions — {path}",
+    "accessCheck": "Check again",
+    "accessChecking": "Checking access…",
+    "accessHint": "Permissions… opens DSM’s own permission settings. Allow {user} Read/Write there and save; this list checks again when you close them.",
+    "accessManual": "Open Control Panel > Shared Folder, edit the shared folder of {path}, open Permissions, choose System internal user and allow {user} Read/Write. For a folder inside it, use File Station > Properties > Permission.",
+    "accessShareClosed": "No access to the shared folder {share}"
   },
   "ger": {
     "opening": "{app} wird geöffnet",
@@ -127,6 +142,21 @@
     "phoneOffFailed": "Die Adresse konnte nicht ausgeschaltet werden: {reason}",
     "phoneButton": "Auf Smartphones öffnen…",
     "manage": "Verwalten",
-    "close": "Schließen"
+    "close": "Schließen",
+    "accessMenu": "Ordnerzugriff…",
+    "accessTitle": "Ordnerzugriff",
+    "accessIntro": "{app} läuft als systeminterner Benutzer {user} und kann nur Ordner verwenden, auf die dieser Benutzer zugreifen darf. Das Auswählen eines Ordners erteilt keinen Zugriff.",
+    "accessData": "App-Daten",
+    "accessOk": "Lesen und Schreiben",
+    "accessReadOnly": "Nur Lesen",
+    "accessNone": "Kein Zugriff",
+    "accessMissing": "Ordner existiert nicht",
+    "accessPermissions": "Berechtigungen…",
+    "accessPermissionsOf": "Berechtigungen – {path}",
+    "accessCheck": "Erneut prüfen",
+    "accessChecking": "Zugriff wird geprüft…",
+    "accessHint": "Berechtigungen… öffnet die Berechtigungseinstellungen von DSM. Erlauben Sie dort {user} Lesen/Schreiben und speichern Sie; beim Schließen wird erneut geprüft.",
+    "accessManual": "Öffnen Sie Systemsteuerung > Gemeinsamer Ordner, bearbeiten Sie den gemeinsamen Ordner von {path}, öffnen Sie Berechtigungen, wählen Sie Systeminterner Benutzer und erlauben Sie {user} Lesen/Schreiben. Für einen Ordner darin: File Station > Eigenschaften > Berechtigung.",
+    "accessShareClosed": "Kein Zugriff auf den gemeinsamen Ordner {share}"
   }
 }

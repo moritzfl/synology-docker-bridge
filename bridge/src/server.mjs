@@ -9,6 +9,7 @@ import httpProxy from "http-proxy";
 import { createAuthenticator } from "./auth.mjs";
 import { loadConfig } from "./config.mjs";
 import { scopeCookies } from "./cookies.mjs";
+import { parseUser, probe } from "./access.mjs";
 import { applyIdentity } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
@@ -265,6 +266,46 @@ async function status() {
       outputContainerDir: env[config.outputContainerKey] || containerLinkPath(),
     } : {}),
   };
+}
+
+/**
+ * The data folder's real path on the NAS, for DSM's permission dialogs. The compose file names
+ * it through DSM's per-package link, whose target says which volume the share is on.
+ */
+async function dataHostPath() {
+  const configured = String(env.APP_DATA_DIR || "");
+  const match = /^\/var\/packages\/[^/]+\/shares\/([^/]+)(\/.*)?$/.exec(configured);
+  if (!match || !config.sharesDir) return configured;
+  try {
+    const target = await fs.readlink(path.posix.join(config.sharesDir, match[1]));
+    return path.posix.join(target, match[2] || "");
+  } catch {
+    return configured;
+  }
+}
+
+/** The folders the app uses, and whether its own user may read and write them. */
+async function access() {
+  const container = await inspectContainer(config.container);
+  const user = parseUser(container?.user);
+  if (!user) return { folders: [] };
+  const folders = [];
+  if (config.dataDir) {
+    folders.push({ key: "data", path: await dataHostPath(), ...(await probe(config.dataDir, user)) });
+  }
+  if (config.output && outputDir) {
+    const host = hostPath(outputDir, config.allowedRoot, config.hostRoot);
+    // A folder inside a shared folder is out of reach while the shared folder itself is closed.
+    const share = await probe(config.hostRoot, user);
+    folders.push({
+      key: "output",
+      path: outputDir,
+      share: config.allowedRoot,
+      shareOpen: share.read,
+      ...(await probe(host, user)),
+    });
+  }
+  return { folders };
 }
 
 function sleep(milliseconds) {
@@ -629,6 +670,10 @@ async function handleControl(request, response) {
   }
   if (request.method === "GET" && url.pathname === "/status") {
     sendJson(response, 200, await status());
+    return;
+  }
+  if (request.method === "GET" && url.pathname === "/access") {
+    sendJson(response, 200, await access());
     return;
   }
   if (request.method === "POST" && url.pathname === "/session") {

@@ -9,6 +9,7 @@ services:
 {{networkMode}}
 {{ports}}
 {{appUser}}
+{{appInit}}
     environment:
 {{appEnvironment}}
     volumes:
@@ -50,9 +51,14 @@ services:
       BRIDGE_FRAMEWORK_VERSION: "{{frameworkVersion}}"
       BRIDGE_ONE_TIME_SECONDS: "{{oneTimeSeconds}}"
       BRIDGE_SESSION_SECONDS: "{{sessionSeconds}}"
+      BRIDGE_DATA_DIR: /run/app-data
+      BRIDGE_SHARES_DIR: /run/shares
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/packages/{{id}}/target/docker:/compose
       - /var/packages/{{id}}/var:/run/bridge
       - /var/packages/ContainerManager/etc:/container-manager
+      # To check what the app's own user may do there, and to name the folders' real paths.
+      - ${APP_DATA_DIR:-{{dataDirDefault}}}:/run/app-data
+      - /var/packages/{{id}}/shares:/run/shares:ro
 {{bridgeOutputVolume}}

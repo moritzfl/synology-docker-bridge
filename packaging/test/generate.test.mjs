@@ -70,7 +70,7 @@ test("renders every template into valid scripts and JSON", () => {
 
 test("apps without an output folder mount no share", () => {
   const { read } = render({ ...minimal, output: false });
-  assert.doesNotMatch(read("compose.yml"), /- \/var\/packages\/my-app\/shares/);
+  assert.doesNotMatch(read("compose.yml"), /^ {6}- .*(shares\/music|output-parent|host-output)/m);
   assert.equal(JSON.parse(read("conf/resource"))["data-share"].shares.length, 1);
 });
 
@@ -91,6 +91,46 @@ test("identity headers are off unless asked for", () => {
   assert.match(render(minimal).read("compose.yml"), /BRIDGE_IDENTITY_HEADERS: "false"/);
   assert.match(render({ ...minimal, identityHeaders: true }).read("compose.yml"),
     /BRIDGE_IDENTITY_HEADERS: "true"/);
+});
+
+test("as the package user, the app may use its own share and administrators get Folder access", () => {
+  const { read, values } = render({ ...minimal, appUser: "package" });
+  assert.deepEqual(JSON.parse(read("conf/resource"))["data-share"].shares[0].permission, { rw: ["my-app"] });
+  assert.match(read("ui/bridge.js"), /var PACKAGE_USER = true;/);
+  assert.equal(values.packageUser, "true");
+  const other = render(minimal);
+  assert.deepEqual(JSON.parse(other.read("conf/resource"))["data-share"].shares[0].permission, {});
+  assert.match(other.read("ui/bridge.js"), /var PACKAGE_USER = false;/);
+});
+
+test("the bridge sees the data folder and the package's share links to check access", () => {
+  const compose = render(minimal).read("compose.yml");
+  assert.match(compose, /- \$\{APP_DATA_DIR:-\/var\/packages\/my-app\/shares\/my-app\}:\/run\/app-data/);
+  assert.match(compose, /- \/var\/packages\/my-app\/shares:\/run\/shares:ro/);
+});
+
+test("the app gets DSM's time zone unless it opts out, and an init only when asked", () => {
+  const { read } = render(minimal);
+  assert.match(read("compose.yml"), /TZ: "\$\{APP_TZ:-Etc\/UTC\}"/);
+  assert.doesNotMatch(read("compose.yml"), /init: true/);
+  assert.match(read("scripts/preinst"), /SYNOPKG_PKGINST_TEMP_DIR/);
+  const custom = render({ ...minimal, hostTimezone: false, init: true }).read("compose.yml");
+  assert.doesNotMatch(custom, /APP_TZ/);
+  assert.match(custom, /^ {4}init: true$/m);
+  const own = render({ ...minimal, appEnv: { TZ: "Europe/Berlin" } }).read("compose.yml");
+  assert.match(own, /TZ: "Europe\/Berlin"/, "an app's own TZ wins");
+});
+
+test("the NAS time zone is read by name from /etc/localtime", () => {
+  const { target } = render(minimal);
+  // The link target comes in through the environment, never as shell code.
+  const run = (link) => execFileSync("sh", ["-c",
+    `readlink() { printf '%s\\n' "$LINK"; }; . "$1"; host_timezone`, "sh",
+    path.join(target, "scripts", "bridge-env")], { encoding: "utf8", env: { ...process.env, LINK: link } }).trim();
+  assert.equal(run("/usr/share/zoneinfo/Europe/Amsterdam"), "Europe/Amsterdam");
+  assert.equal(run("/usr/share/zoneinfo/America/Argentina/Buenos_Aires"), "America/Argentina/Buenos_Aires");
+  assert.equal(run(""), "Etc/UTC");
+  assert.equal(run("/usr/share/zoneinfo/Europe/Ber lin;x"), "Etc/UTC");
 });
 
 test("German names fall back to English and land in INFO", () => {

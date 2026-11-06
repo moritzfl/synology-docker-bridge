@@ -53,5 +53,8 @@ export function loadConfig(env = process.env) {
     verifySeconds: integer(env.BRIDGE_VERIFY_SECONDS, 1800),
     identityHeaders: env.BRIDGE_IDENTITY_HEADERS === "true",
     frameworkVersion: env.BRIDGE_FRAMEWORK_VERSION || "",
+    // The app's data folder as the bridge sees it, and DSM's links to the package's shares.
+    dataDir: env.BRIDGE_DATA_DIR || "",
+    sharesDir: env.BRIDGE_SHARES_DIR || "",
   };
 }

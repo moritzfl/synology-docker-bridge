@@ -95,7 +95,9 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `containerPort` | Port the app listens on inside its container |
 | `networkMode` | `bridge` (default) or `host`; with `host`, `internalPort` must equal `containerPort` |
 | `appPath` | Web path of the app's UI (`/` or `/app/`) |
-| `appUser` | User the app runs as. Default: the image's own, like `docker run` (root when the image sets none) |
+| `appUser` | User the app runs as. Default: the image's own, like `docker run` (root when the image sets none). `package`: the package's own DSM user; see [Which folders the app may use](#which-folders-the-app-may-use) |
+| `init` | `true`: a minimal init in the app container reaps orphaned child processes (`docker run --init`) |
+| `hostTimezone` | Default `true`: `TZ` names the NAS time zone, e.g. `Europe/Berlin`, read on install and upgrade. An app's own `TZ` in `appEnv` wins |
 | `appEnv` | Extra environment; `${APP_CONTAINER_PORT}` and `${APP_OUTPUT_CONTAINER_DIR}` are filled in |
 | `dataDir` | Host folder mounted at `/data`. Default: the package's own shared folder (administrators only), on whichever volume DSM created it |
 | `output` | `false` for apps that write nothing to a share: no folder setting, no share mounted |
@@ -205,6 +207,28 @@ The same AirPlay Capture package through DSM Login Portal on an iPhone:
 For host-network apps, bind the app's web UI to `127.0.0.1`. Otherwise the internal port is
 reachable on the LAN and bypasses the bridge; other ports (RAOP, mDNS, DLNA) stay on the normal
 interfaces.
+
+## Which folders the app may use
+
+By default the app runs as its image's user, often root, and can use whatever is mounted. With
+`appUser: "package"` it runs as the package's own DSM user instead, a **system internal user**
+named after the package, the way native packages do. DSM's shared folder permissions and ACLs
+then decide what the app may read and write, also inside its container:
+
+- The package's own shared folder (its data) is granted to that user on install, and nothing
+  else is. The output folder, and any folder an administrator picks, needs the administrator's
+  permission first; selecting a folder grants nothing.
+- Administrators get **Manage → Folder access…**. It lists the folders the app uses and checks
+  them as the app's user: it lists the folder and creates and removes one empty folder in it.
+  **Permissions…** opens DSM's own permission dialog for that folder: the shared folder's
+  Permissions with System internal user and the package selected, or File Station's Permission
+  tab for a folder inside a share. The window never changes permissions itself; it checks again
+  when the dialog closes.
+- The window opens Folder access by itself for administrators when a folder needs attention,
+  for example right after installing, and after the output folder changes.
+
+Container Manager runs a service without a `user` line as the package user, with the user's
+numeric ids; the bridge reads them from the container to run its check.
 
 ### Security: trust the images you package
 

@@ -107,6 +107,7 @@ function summarize(item) {
     id: item.Id,
     name: String(item.Name || "").replace(/^\//, ""),
     image: item.Config?.Image || "",
+    user: item.Config?.User || "",
     imageId: item.Image || "",
     labels: item.Config?.Labels || {},
     state: item.State?.Status || "unknown",

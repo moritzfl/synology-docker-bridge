@@ -3,7 +3,7 @@
     "shares": [
       {
         "name": "{{id}}",
-        "permission": {},
+        "permission": {{dataSharePermission}},
         "once": true
       }{{outputShareResource}}
     ]

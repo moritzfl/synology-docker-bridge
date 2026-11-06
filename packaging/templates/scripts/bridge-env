@@ -57,6 +57,15 @@ unset_env() {
     mv "$tmp" "$ENV_FILE"
 }
 
+# DSM's time zone by name, e.g. Europe/Berlin: /etc/localtime links into zoneinfo.
+host_timezone() {
+    zone="$(readlink /etc/localtime 2>/dev/null | sed -n 's#^.*/zoneinfo/##p')"
+    case "$zone" in
+        ''|*[!A-Za-z0-9/_+-]*) zone="Etc/UTC" ;;
+    esac
+    printf '%s\n' "$zone"
+}
+
 get_env() {
     sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | head -1
 }
@@ -80,6 +89,7 @@ ensure_env() {
     set_env BRIDGE_IMAGE "{{bridgeImage}}"
     set_env APP_CONTAINER "{{container}}"
     set_env APP_DATA_DIR "{{dataDirDefault}}"
+    set_env APP_TZ "$(host_timezone)"
     set_env APP_INTERNAL_PORT "${saved_internal:-{{hostPort}}}"
     set_env APP_CONTAINER_PORT "${saved_container_port:-{{containerPort}}}"
     set_env BRIDGE_CONTROL_PORT "$(cat "$CONTROL_FILE")"

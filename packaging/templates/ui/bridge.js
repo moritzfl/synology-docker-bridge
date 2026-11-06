@@ -7,6 +7,9 @@
   var NAME = "{{displayName}}";
   var BASE = "/webman/3rdparty/{{id}}/";
   var SHOW_OUTPUT = {{showOutput}};
+  // The app runs as the package's own DSM user, whose folder permissions administrators manage.
+  var PACKAGE_USER = {{packageUser}};
+  var PACKAGE_USER_NAME = "{{id}}";
   var OUTPUT_LABEL = {{outputLabelJson}};
   // Where folders may be; the package may have fallen back to its own share on this NAS.
   var OUTPUT_PARENT = "{{outputParent}}";
@@ -205,21 +208,18 @@
       // Package Center's Stop/Run.
       var tbar = null;
       if (isAdmin() && !standalone) {
-        var phoneItem = { text: t("phoneButton"), handler: function () { self.openPhone(); } };
+        var items = [];
         if (SHOW_OUTPUT) {
-          // Two tasks: DSM's toolbar dropdown, like File Station's Tools, keeps them to one button.
-          this.manageButton = new Button({
-            text: t("manage"),
-            menu: new Ext.menu.Menu({
-              items: [
-                { text: label() + "…", handler: function () { self.openSettings(); } },
-                phoneItem,
-              ],
-            }),
-          });
-        } else {
-          this.manageButton = new Button(phoneItem);
+          items.push({ text: label() + "…", handler: function () { self.openSettings(); } });
         }
+        if (PACKAGE_USER) {
+          items.push({ text: t("accessMenu"), handler: function () { self.openAccess(); } });
+        }
+        items.push({ text: t("phoneButton"), handler: function () { self.openPhone(); } });
+        // Several tasks: DSM's toolbar dropdown, like File Station's Tools, keeps them to one button.
+        this.manageButton = items.length > 1
+          ? new Button({ text: t("manage"), menu: new Ext.menu.Menu({ items: items }) })
+          : new Button(items[0]);
         tbar = [this.manageButton];
       }
       if (standalone) {
@@ -255,6 +255,10 @@
       // have fired here; ask directly.
       this.loadStatus();
       this.on("show", function () { self.loadStatus(); });
+      if (PACKAGE_USER && isAdmin() && !standalone) {
+        // Right after installing, the app may not yet be allowed into its folders; say so at once.
+        this.checkAccessQuietly();
+      }
     },
 
     /**
@@ -455,6 +459,7 @@
                 self.status = data;
                 self.notifyFrame("bridge:restarting");
                 self.whenReady();
+                if (PACKAGE_USER) self.checkAccessQuietly();
                 var skipped = (data.skipped || []).length;
                 if (skipped) {
                   alertBox(t("skippedTitle"), escapeHtml(t("skipped",
@@ -556,5 +561,182 @@
       this.phoneWindow.show();
       render();
     },
+
+    /** Opens Folder access only when a folder needs attention; silent otherwise. */
+    checkAccessQuietly: function () {
+      var self = this;
+      api(BASE + "access.cgi").then(function (data) {
+        if ((data.folders || []).some(function (folder) { return !accessOk(folder); })) {
+          self.openAccess(data);
+        }
+      }).catch(function (error) {
+        console.warn("folder access check failed", error);
+      });
+    },
+
+    /**
+     * The folders the app uses and whether its own user may read and write them. DSM's
+     * permissions decide; this window never changes them. Each folder opens DSM's own permission
+     * dialog for it, ready on the package user, and the check repeats when that dialog closes.
+     */
+    openAccess: function (prefetched) {
+      var self = this;
+      if (this.accessWindow && !this.accessWindow.isDestroyed) {
+        this.accessWindow.toFront();
+        return;
+      }
+      var folders = [];
+      var body = new Ext.BoxComponent({ html: "" });
+      function render(data) {
+        folders = data.folders || [];
+        var html = "<p style=\"margin:0 0 12px\">" + escapeHtml(t("accessIntro", { user: PACKAGE_USER_NAME }))
+          + "</p><table style=\"width:100%;border-collapse:collapse\">";
+        folders.forEach(function (folder, index) {
+          var ok = accessOk(folder);
+          var state = !folder.exists ? t("accessMissing")
+            : ok ? t("accessOk")
+            : folder.read ? t("accessReadOnly")
+            : folder.share && !folder.shareOpen ? t("accessShareClosed", { share: shareName(folder.share) })
+            : t("accessNone");
+          html += "<tr style=\"border-top:1px solid #e3e7ec\">"
+            + "<td style=\"padding:8px 8px 8px 0\"><div style=\"font-weight:bold\">"
+            + escapeHtml(folder.key === "output" ? label() : t("accessData")) + "</div>"
+            + "<div style=\"color:#6b7685;font-size:12px;word-break:break-all\">" + escapeHtml(folder.path) + "</div></td>"
+            + "<td style=\"padding:8px;white-space:nowrap;color:" + (ok ? "#1e9e45" : "#d03030") + "\">"
+            + escapeHtml(state) + "</td>"
+            + "<td style=\"padding:8px 0;text-align:right;white-space:nowrap\">"
+            + (folder.exists ? "<a href=\"#\" data-folder=\"" + index + "\">" + escapeHtml(t("accessPermissions")) + "</a>" : "")
+            + "</td></tr>";
+        });
+        html += "</table><p style=\"margin:12px 0 0;color:#6b7685;font-size:12px\">"
+          + escapeHtml(t("accessHint", { user: PACKAGE_USER_NAME })) + "</p>";
+        body.update(html);
+      }
+      function check() {
+        if (!self.accessWindow || self.accessWindow.isDestroyed) return Promise.resolve();
+        self.accessWindow.getEl().mask(t("accessChecking"));
+        return api(BASE + "access.cgi").then(render).catch(function (error) {
+          body.update("<p>" + escapeHtml(explain(error)) + "</p>");
+        }).then(function () {
+          if (self.accessWindow && !self.accessWindow.isDestroyed) self.accessWindow.getEl().unmask();
+        });
+      }
+      this.accessWindow = new SYNO.SDS.ModalWindow({
+        owner: this,
+        title: t("accessTitle"),
+        width: 640,
+        height: 330,
+        layout: "fit",
+        items: [new Ext.Panel({ border: false, autoScroll: true, bodyStyle: "padding:16px 20px", items: [body] })],
+        buttons: [
+          {
+            xtype: "syno_button",
+            btnStyle: "grey",
+            text: t("accessCheck"),
+            handler: check,
+          },
+          {
+            xtype: "syno_button",
+            btnStyle: "blue",
+            text: t("close"),
+            handler: function () { self.accessWindow.close(); },
+          },
+        ],
+      });
+      this.accessWindow.show();
+      this.accessWindow.body.on("click", function (event, target) {
+        var folder = folders[Number(target.getAttribute("data-folder"))];
+        event.preventDefault();
+        if (!folder) return;
+        // While the shared folder itself is closed to the app, that is the permission to change.
+        var target = folder.share && !folder.shareOpen ? folder.share : folder.path;
+        self.openPermissions(target).then(function (dialog) {
+          if (dialog) dialog.on("destroy", check);
+        }).catch(function (error) {
+          console.warn("permission dialog failed", error);
+          alertBox(t("accessTitle"), escapeHtml(t("accessManual", { user: PACKAGE_USER_NAME, path: folder.path })));
+        });
+      }, null, { delegate: "a[data-folder]" });
+      if (prefetched) render(prefetched);
+      else check();
+    },
+
+    /**
+     * DSM's own permission dialog for a folder: the shared folder's Permissions with System
+     * internal user and the package user selected, or File Station's permission tab for a folder
+     * inside it. Resolves the share through DSM rather than guessing it from the path.
+     */
+    openPermissions: function (target) {
+      var self = this;
+      target = String(target || "").replace(/\/+$/, "");
+      if (!/^\/volume[^/]*\/[^/]/.test(target) || target.split("/").indexOf("..") >= 0) {
+        return Promise.reject(new Error("invalid folder"));
+      }
+      return webapi("SYNO.FileStation.List", "list_share", 2,
+        { additional: ["real_path", "perm"], status_filter: "valid" }).then(function (listed) {
+        var share = (listed.shares || []).filter(function (entry) {
+          var root = entry.additional && entry.additional.real_path;
+          return typeof root === "string" && (target === root || target.indexOf(root + "/") === 0);
+        }).sort(function (a, b) {
+          return b.additional.real_path.length - a.additional.real_path.length;
+        })[0];
+        if (!share) throw new Error("shared folder unavailable");
+        if (target === share.additional.real_path) {
+          return SYNO.SDS.JSLoadPromise("SYNO.SDS.Share.PermissionDialog").then(function () {
+            return webapi("SYNO.Core.Share", "get", 1,
+              { name: share.name, additional: ["is_aclmode", "encryption"] });
+          }).then(function (info) {
+            var dialog = new SYNO.SDS.Share.PermissionDialog({ owner: self });
+            var grid = dialog.gridPanel;
+            // The dialog first lists local users; switch to the package user once it has loaded.
+            grid.store.on("load", function () {
+              if (dialog.isDestroyed) return;
+              var roles = grid.roleFilter.getStore();
+              var record = roles.getAt(roles.findExact("role", "system"));
+              if (!record) return;
+              grid.roleFilter.setValue("system");
+              grid.nameFilter.setValue(PACKAGE_USER_NAME);
+              grid.store.baseParams.substr = PACKAGE_USER_NAME;
+              grid.onRoleFilterSelect(grid.roleFilter, record);
+            }, null, { single: true });
+            dialog.loadPermissionData(new Ext.data.Record(info));
+            return dialog;
+          });
+        }
+        var virtual = share.path + target.slice(share.additional.real_path.length);
+        return SYNO.SDS.JSLoadPromise("SYNO.FileStation.PropertyDialog").then(function () {
+          return webapi("SYNO.FileStation.List", "getinfo", 2,
+            { path: [virtual], additional: ["real_path", "perm"] });
+        }).then(function (data) {
+          var file = (data.files || [])[0];
+          if (!file || !file.isdir || !file.additional || file.additional.real_path !== target
+              || !file.additional.perm || !file.additional.perm.is_acl_mode) {
+            throw new Error("folder permissions unavailable");
+          }
+          var dialog = new SYNO.FileStation.PropertyDialog({
+            owner: self,
+            rec: [new Ext.data.Record(Ext.apply({
+              filename: file.name, file_id: file.path, real_path: target, isshare: false,
+            }, file))],
+            source: SYNO.webfm.utils.source.remote,
+            privilegeType: SYNO.SDS.Share.PropertyDialogEnum.privilegeType.acl,
+            hideInfoPanel: true,
+            hideAdvPermPanel: true,
+            title: t("accessPermissionsOf", { path: target }),
+            isShareForceRO: !!share.additional.perm && !!share.additional.perm.is_share_readonly,
+          });
+          dialog.load();
+          return dialog;
+        });
+      });
+    },
   });
+
+  function accessOk(folder) {
+    return folder.exists && folder.read && folder.write;
+  }
+
+  function shareName(sharePath) {
+    return String(sharePath).replace(/\/+$/, "").split("/").pop();
+  }
 })();

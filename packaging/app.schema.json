@@ -121,7 +121,17 @@
     },
     "appUser": {
       "type": "string",
-      "description": "User the app runs as; defaults to the image's own."
+      "description": "User the app runs as; defaults to the image's own. \"package\": the package's own DSM user (a system internal user), so DSM permissions decide which folders the app may use, and administrators get Folder access in the window."
+    },
+    "hostTimezone": {
+      "type": "boolean",
+      "default": true,
+      "description": "Set TZ to the NAS time zone (Control Panel > Regional Options), read on install and upgrade. An app's own TZ in appEnv wins."
+    },
+    "init": {
+      "type": "boolean",
+      "default": false,
+      "description": "Run a minimal init in the app container (docker run --init), for apps that start child processes."
     },
     "appEnv": {
       "type": "object",

@@ -159,6 +159,11 @@ function imageUser(image, platform) {
   return user || "0:0";
 }
 
+/** The app runs as the package's own DSM user, so DSM permissions decide what it may access. */
+export function packageUser(config) {
+  return config.appUser === "package";
+}
+
 /** Fails the build when an embedded image is not for the package's platform. */
 function verifyPlatform(imageTar, platform, stage) {
   const [os_, architecture] = platform.split("/");
@@ -306,6 +311,8 @@ export function resolve(raw, configDir) {
     APP_PORT: `\${APP_CONTAINER_PORT:-${config.containerPort}}`,
     ...(showOutput ? { APP_OUTPUT_DIR: `\${APP_OUTPUT_CONTAINER_DIR:-${defaultContainerOutput}}` } : {}),
     APP_DATA_DIR: "/data",
+    // DSM's time zone (Control Panel > Regional Options) by name; preinst reads it from the NAS.
+    ...(config.hostTimezone === false ? {} : { TZ: "${APP_TZ:-Etc/UTC}" }),
     ...(config.appEnv || {}),
   };
   for (const [key, value] of Object.entries(appEnv)) {
@@ -368,12 +375,15 @@ export function resolve(raw, configDir) {
     networkMode: network,
     ports,
     appUser: "",
+    // docker run --init: a minimal init reaps the app's orphaned child processes.
+    appInit: config.init === true ? "    init: true" : "",
+    packageUser: packageUser(config) ? "true" : "false",
+    // An app running as the package user may read and write its own share; nothing else.
+    dataSharePermission: JSON.stringify(packageUser(config) ? { rw: [id] } : {}),
     frameworkVersion: frameworkVersion(),
     appEnvironment,
     appOutputVolume: outputVolume(config.outputContainerRoot),
-    bridgeOutputVolume: showOutput
-      ? `${outputVolume(config.outputHostRoot)}\n      - /var/packages/${id}/shares:/run/shares:ro`
-      : "",
+    bridgeOutputVolume: showOutput ? outputVolume(config.outputHostRoot) : "",
     outputShare: config.outputShare,
     outputShareResource,
     width: config.ui.width || 1200,
@@ -392,14 +402,14 @@ export function renderTemplates(values, target) {
 function check(config, values, archInfo) {
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-bridge-check-"));
   try {
-    renderTemplates({ ...values, appUser: '    user: "0:0"' }, stage);
+    renderTemplates({ ...values, appUser: packageUser(config) ? "" : '    user: "0:0"' }, stage);
     for (const file of ["conf/resource", "conf/privilege", "ui/config"]) {
       JSON.parse(fs.readFileSync(path.join(stage, file), "utf8"));
     }
     for (const script of fs.readdirSync(path.join(stage, "scripts"))) {
       execFileSync("sh", ["-n", path.join(stage, "scripts", script)]);
     }
-    for (const cgi of ["auth.sh", "status.cgi", "session.cgi", "settings.cgi"]) {
+    for (const cgi of ["auth.sh", "status.cgi", "session.cgi", "settings.cgi", "access.cgi"]) {
       execFileSync("sh", ["-n", path.join(stage, "ui", cgi)]);
     }
     if (config.icon) {
@@ -434,9 +444,15 @@ function main() {
   // Container Manager runs every service without an explicit user as the package's own DSM
   // user, so official images that start as root (nginx, most databases) fail on their first
   // mkdir. Always state the user: the configured one, else the image's own, as docker run would.
-  const user = config.appUser ? String(config.appUser) : imageUser(config.image, archInfo.platform);
-  values.appUser = `    user: ${JSON.stringify(user)}`;
-  console.log(`==> app runs as ${user}`);
+  // "package": no user line, so Container Manager runs the app as the package's own DSM user.
+  if (packageUser(config)) {
+    values.appUser = "";
+    console.log(`==> app runs as the package user ${id}`);
+  } else {
+    const user = config.appUser ? String(config.appUser) : imageUser(config.image, archInfo.platform);
+    values.appUser = `    user: ${JSON.stringify(user)}`;
+    console.log(`==> app runs as ${user}`);
+  }
 
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-bridge-"));
   const payload = path.join(stage, "payload");
@@ -486,7 +502,7 @@ function main() {
   for (const script of fs.readdirSync(path.join(payload, "scripts"))) {
     fs.chmodSync(path.join(payload, "scripts", script), 0o755);
   }
-  for (const cgi of ["status.cgi", "settings.cgi", "session.cgi", "auth.sh"]) {
+  for (const cgi of ["status.cgi", "settings.cgi", "session.cgi", "access.cgi", "auth.sh"]) {
     fs.chmodSync(path.join(payload, "ui", cgi), 0o755);
   }
 
