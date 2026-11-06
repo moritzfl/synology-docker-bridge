@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { parsePublicPaths } from "./public.mjs";
 
 function integer(value, fallback) {
   const parsed = Number(value);
@@ -56,5 +57,6 @@ export function loadConfig(env = process.env) {
     // The app's data folder as the bridge sees it, and DSM's links to the package's shares.
     dataDir: env.BRIDGE_DATA_DIR || "",
     sharesDir: env.BRIDGE_SHARES_DIR || "",
+    publicPaths: parsePublicPaths(env.BRIDGE_PUBLIC_PATHS),
   };
 }

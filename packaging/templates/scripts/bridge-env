@@ -66,6 +66,23 @@ host_timezone() {
     printf '%s\n' "$zone"
 }
 
+# Where devices on the network reach the app's public paths: the NAS's LAN address on DSM's own
+# HTTP port. Empty when the package has none, or when either cannot be found.
+public_url() {
+    prefix="{{publicPrefix}}"
+    [ -n "$prefix" ] || return 0
+    address="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)"
+    if [ -z "$address" ]; then
+        address="$(ip -4 -o addr show scope global 2>/dev/null | grep -v docker | sed -n 's/.* inet \([0-9.]*\)\/.*/\1/p' | head -1)"
+    fi
+    port="$(sed -n 's/^[[:space:]]*listen \([0-9]*\) default_server;$/\1/p' /etc/nginx/nginx.conf 2>/dev/null | head -1)"
+    case "$address" in
+        ''|*[!0-9.]*) return 0 ;;
+    esac
+    valid_port "$port" || port=5000
+    printf 'http://%s:%s%s\n' "$address" "$port" "$prefix"
+}
+
 get_env() {
     sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | head -1
 }
@@ -90,6 +107,7 @@ ensure_env() {
     set_env APP_CONTAINER "{{container}}"
     set_env APP_DATA_DIR "{{dataDirDefault}}"
     set_env APP_TZ "$(host_timezone)"
+    set_env APP_PUBLIC_URL "$(public_url)"
     set_env APP_INTERNAL_PORT "${saved_internal:-{{hostPort}}}"
     set_env APP_CONTAINER_PORT "${saved_container_port:-{{containerPort}}}"
     set_env BRIDGE_CONTROL_PORT "$(cat "$CONTROL_FILE")"

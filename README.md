@@ -97,6 +97,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `appPath` | Web path of the app's UI (`/` or `/app/`) |
 | `appUser` | User the app runs as. Default: the image's own, like `docker run` (root when the image sets none). `package`: the package's own DSM user; see [Which folders the app may use](#which-folders-the-app-may-use) |
 | `init` | `true`: a minimal init in the app container reaps orphaned child processes (`docker run --init`) |
+| `publicPaths` | App paths devices may fetch without signing in, e.g. `["/media/"]`; see [Paths without sign-in](#paths-without-sign-in) |
 | `hostTimezone` | Default `true`: `TZ` names the NAS time zone, e.g. `Europe/Berlin`, read on install and upgrade. An app's own `TZ` in `appEnv` wins |
 | `appEnv` | Extra environment; `${APP_CONTAINER_PORT}` and `${APP_OUTPUT_CONTAINER_DIR}` are filled in |
 | `dataDir` | Host folder mounted at `/data`. Default: the package's own shared folder (administrators only), on whichever volume DSM created it |
@@ -212,6 +213,24 @@ The same AirPlay Capture package through DSM Login Portal on an iPhone:
 For host-network apps, bind the app's web UI to `127.0.0.1`. Otherwise the internal port is
 reachable on the LAN and bypasses the bridge; other ports (RAOP, mDNS, DLNA) stay on the normal
 interfaces.
+
+## Paths without sign-in
+
+Some apps hand other devices a link: a speaker downloads audio, an OAuth provider sends a browser
+back. Those devices have no DSM session. `publicPaths` lists exactly those app paths, and DSM's
+nginx serves them at `http://<nas>:<dsm-port>/webman/3rdparty/<id>/public/…`, on DSM's own ports,
+so the app still needs no port of its own:
+
+- Only the listed paths reach the app; a trailing slash allows everything below it. Every other
+  path is not found. Dot segments and encoded separators are resolved before the check.
+- Requests carry no identity headers and no cookies, so the app sees them as anonymous. Keep
+  these paths unguessable or harmless, for example a random token per file.
+- No buffering: what the app writes reaches the device as it is written, for streamed audio.
+- The app gets `APP_PUBLIC_URL` (also as `${APP_PUBLIC_URL}` in `appEnv`): the NAS's LAN address
+  on DSM's HTTP port plus the prefix, found on install and upgrade.
+- DSM's "redirect HTTP to HTTPS" setting does not affect these paths: DSM redirects in its sign-in
+  page, not in nginx. Devices that only accept HTTPS need a certificate they trust on DSM's
+  HTTPS port.
 
 ## Which folders the app may use
 

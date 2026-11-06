@@ -53,6 +53,7 @@ services:
       BRIDGE_SESSION_SECONDS: "{{sessionSeconds}}"
       BRIDGE_DATA_DIR: /run/app-data
       BRIDGE_SHARES_DIR: /run/shares
+      BRIDGE_PUBLIC_PATHS: "{{publicPaths}}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/packages/{{id}}/target/docker:/compose

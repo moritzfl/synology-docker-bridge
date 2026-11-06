@@ -159,6 +159,29 @@ function imageUser(image, platform) {
   return user || "0:0";
 }
 
+/**
+ * DSM nginx forwards the public prefix to the bridge without a session. No buffering, so audio
+ * that the app writes while it is still being made reaches the device as it is written.
+ */
+function publicLocation(id, controlPort) {
+  return [
+    "",
+    `location ^~ /webman/3rdparty/${id}/public/ {`,
+    "    proxy_set_header Host $http_host;",
+    "    proxy_set_header X-Real-IP $remote_addr;",
+    "    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
+    "    proxy_set_header X-Forwarded-Proto $scheme;",
+    `    proxy_set_header X-Forwarded-Prefix /webman/3rdparty/${id}/public;`,
+    "    proxy_http_version 1.1;",
+    "    proxy_buffering off;",
+    "    proxy_request_buffering off;",
+    "    proxy_read_timeout 3600s;",
+    "    proxy_intercept_errors off;",
+    `    proxy_pass http://127.0.0.1:${controlPort}/__public/;`,
+    "}",
+  ].join("\n");
+}
+
 /** The app runs as the package's own DSM user, so DSM permissions decide what it may access. */
 export function packageUser(config) {
   return config.appUser === "package";
@@ -302,6 +325,15 @@ export function resolve(raw, configDir) {
   config.controlPort = Number(config.controlPort || controlPortFor(id));
   config.ui = config.ui || {};
 
+  // App paths that devices on the network fetch without a DSM session; see bridge/src/public.mjs.
+  const publicPaths = config.publicPaths || [];
+  if (!Array.isArray(publicPaths) || publicPaths.some((item) => typeof item !== "string"
+      || !/^\/[A-Za-z0-9._~\/-]*$/.test(item) || item === "/" || item.includes("//")
+      || item.split("/").some((part) => part === "." || part === ".."))) {
+    throw new Error("publicPaths must be app paths such as /media/ (a trailing slash allows everything below)");
+  }
+  const publicPrefix = `/webman/3rdparty/${id}/public`;
+
   let appPath = config.appPath || "/";
   if (!appPath.startsWith("/")) appPath = `/${appPath}`;
   if (!appPath.endsWith("/")) appPath = `${appPath}/`;
@@ -311,6 +343,8 @@ export function resolve(raw, configDir) {
     APP_PORT: `\${APP_CONTAINER_PORT:-${config.containerPort}}`,
     ...(showOutput ? { APP_OUTPUT_DIR: `\${APP_OUTPUT_CONTAINER_DIR:-${defaultContainerOutput}}` } : {}),
     APP_DATA_DIR: "/data",
+    // Where devices on the network reach the public paths: the NAS address on DSM's HTTP port.
+    ...(publicPaths.length ? { APP_PUBLIC_URL: "${APP_PUBLIC_URL:-}" } : {}),
     // DSM's time zone (Control Panel > Regional Options) by name; preinst reads it from the NAS.
     ...(config.hostTimezone === false ? {} : { TZ: "${APP_TZ:-Etc/UTC}" }),
     ...(config.appEnv || {}),
@@ -318,6 +352,7 @@ export function resolve(raw, configDir) {
   for (const [key, value] of Object.entries(appEnv)) {
     appEnv[key] = String(value)
       .replaceAll("${APP_CONTAINER_PORT}", `\${APP_CONTAINER_PORT:-${config.containerPort}}`)
+      .replaceAll("${APP_PUBLIC_URL}", "${APP_PUBLIC_URL:-}")
       .replaceAll("${APP_INTERNAL_PORT}", `\${APP_INTERNAL_PORT:-${config.internalPort}}`)
       .replaceAll("${APP_OUTPUT_CONTAINER_DIR}", `\${APP_OUTPUT_CONTAINER_DIR:-${defaultContainerOutput}}`);
   }
@@ -378,6 +413,9 @@ export function resolve(raw, configDir) {
     // docker run --init: a minimal init reaps the app's orphaned child processes.
     appInit: config.init === true ? "    init: true" : "",
     packageUser: packageUser(config) ? "true" : "false",
+    publicPaths: publicPaths.join(","),
+    publicPrefix: publicPaths.length ? publicPrefix : "",
+    publicLocation: publicPaths.length ? publicLocation(id, config.controlPort) : "",
     // An app running as the package user may read and write its own share; nothing else.
     dataSharePermission: JSON.stringify(packageUser(config) ? { rw: [id] } : {}),
     frameworkVersion: frameworkVersion(),

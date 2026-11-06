@@ -133,6 +133,42 @@ test("the NAS time zone is read by name from /etc/localtime", () => {
   assert.equal(run("/usr/share/zoneinfo/Europe/Ber lin;x"), "Etc/UTC");
 });
 
+test("public paths get their own nginx location, the bridge's list and the app's address", () => {
+  const { read } = render({ ...minimal, publicPaths: ["/media/", "/oauth/callback"],
+    appEnv: { MY_URL: "${APP_PUBLIC_URL}" } });
+  const nginx = read("config/dsm.bridge.conf");
+  assert.match(nginx, /location \^~ \/webman\/3rdparty\/my-app\/public\/ \{/);
+  assert.match(nginx, /proxy_buffering off;/);
+  assert.match(nginx, /proxy_pass http:\/\/127\.0\.0\.1:\d+\/__public\/;/);
+  const compose = read("compose.yml");
+  assert.match(compose, /BRIDGE_PUBLIC_PATHS: "\/media\/,\/oauth\/callback"/);
+  assert.match(compose, /APP_PUBLIC_URL: "\$\{APP_PUBLIC_URL:-\}"/);
+  assert.match(compose, /MY_URL: "\$\{APP_PUBLIC_URL:-\}"/);
+  assert.match(read("scripts/bridge-env"), /prefix="\/webman\/3rdparty\/my-app\/public"/);
+  const none = render(minimal);
+  assert.doesNotMatch(none.read("config/dsm.bridge.conf"), /public/);
+  assert.doesNotMatch(none.read("compose.yml"), /APP_PUBLIC_URL/);
+  for (const bad of [["/"], ["media/"], ["/a/../b"], ["/a//b"], ["/a b"], "/media/"]) {
+    assert.throws(() => resolve({ ...minimal, publicPaths: bad }, here), /publicPaths/, JSON.stringify(bad));
+  }
+});
+
+test("the public address is the NAS's LAN address on DSM's HTTP port", () => {
+  const { target } = render({ ...minimal, publicPaths: ["/media/"] });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "public-url-"));
+  const nginx = path.join(dir, "nginx.conf");
+  fs.writeFileSync(nginx, "server {\n    listen 5080 default_server;\n    listen 5443 default_server ssl;\n}\n");
+  const script = path.join(target, "scripts", "bridge-env");
+  fs.writeFileSync(script, fs.readFileSync(script, "utf8").replace("/etc/nginx/nginx.conf", nginx));
+  // ip is stubbed; its output comes in through the environment, never as shell code.
+  const run = (route) => execFileSync("sh", ["-c",
+    `ip() { [ "$2" = route ] && printf '%s\\n' "$ROUTE"; return 0; }; . "$1"; public_url`, "sh", script],
+  { encoding: "utf8", env: { ...process.env, ROUTE: route } }).trim();
+  assert.equal(run("1.1.1.1 via 192.168.178.1 dev eth0 src 192.168.178.136 uid 0"),
+    "http://192.168.178.136:5080/webman/3rdparty/my-app/public");
+  assert.equal(run(""), "", "no address, no URL");
+});
+
 test("German names fall back to English and land in INFO", () => {
   assert.match(render(minimal).read("INFO"), /displayname_ger="My App"/);
   const info = render({ ...minimal, displayNameGer: "Meine App", descriptionGer: "Test-App" }).read("INFO");

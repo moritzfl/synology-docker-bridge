@@ -6,11 +6,12 @@ if [ ! -x /usr/local/bin/docker_inspect ]; then
     exit 1
 fi
 # Container Manager creates the containers from the packaged docker/.env before postinst runs, so
-# the NAS time zone goes into that file here, while it is still in the unpacked package.
+# the NAS time zone and public address go into that file here, while it is still in the unpacked package.
 . "$(dirname "$0")/bridge-env"
 PACKAGED_ENV="${SYNOPKG_PKGINST_TEMP_DIR:-}/docker/.env"
 if [ -n "${SYNOPKG_PKGINST_TEMP_DIR:-}" ] && [ -f "$PACKAGED_ENV" ]; then
     ENV_FILE="$PACKAGED_ENV"
     set_env APP_TZ "$(host_timezone)"
+    set_env APP_PUBLIC_URL "$(public_url)"
 fi
 exit 0

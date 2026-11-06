@@ -123,6 +123,11 @@
       "type": "string",
       "description": "User the app runs as; defaults to the image's own. \"package\": the package's own DSM user (a system internal user), so DSM permissions decide which folders the app may use, and administrators get Folder access in the window."
     },
+    "publicPaths": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^/[A-Za-z0-9._~/-]*$" },
+      "description": "App paths that devices on the network may fetch without a DSM session, such as audio for speakers, served at /webman/3rdparty/<id>/public/ on DSM's ports. A trailing slash allows everything below it. The app learns the full address from APP_PUBLIC_URL."
+    },
     "hostTimezone": {
       "type": "boolean",
       "default": true,

@@ -10,6 +10,7 @@ import { createAuthenticator } from "./auth.mjs";
 import { loadConfig } from "./config.mjs";
 import { scopeCookies } from "./cookies.mjs";
 import { parseUser, probe } from "./access.mjs";
+import { publicTarget } from "./public.mjs";
 import { applyIdentity, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
@@ -433,6 +434,26 @@ async function publicHandler(request, response) {
   }
 }
 
+/**
+ * The app paths listed in publicPaths, for devices that fetch them without a DSM session. They
+ * reach the app without identity headers and without any cookie, so the app treats them as
+ * anonymous.
+ */
+function anonymousHandler(request, response) {
+  const target = publicTarget(request.url, config.publicPaths);
+  if (!target || !["GET", "HEAD", "POST"].includes(request.method)) {
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    response.end("Not found\n");
+    return;
+  }
+  applyIdentity(request.headers, null, false);
+  delete request.headers.cookie;
+  request._bridgePrefix = forwardedPrefix(request);
+  delete request.headers["x-forwarded-prefix"];
+  request.url = target;
+  proxy.web(request, response);
+}
+
 async function upgradeHandler(request, socket, head) {
   try {
     const identity = auth.authenticate(request);
@@ -721,6 +742,12 @@ async function startControl(port) {
     if (url.pathname.startsWith("/__proxy/")) {
       request.url = url.pathname.slice("/__proxy".length) + url.search;
       publicHandler(request, response);
+      return;
+    }
+    if (url.pathname.startsWith("/__public/")) {
+      // The raw path: publicTarget normalizes it itself before checking the allowed list.
+      request.url = String(request.url).slice("/__public".length);
+      anonymousHandler(request, response);
       return;
     }
     handleControl(request, response).catch((error) => {
