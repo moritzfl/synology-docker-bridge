@@ -10,7 +10,7 @@ import { createAuthenticator } from "./auth.mjs";
 import { loadConfig } from "./config.mjs";
 import { scopeCookies } from "./cookies.mjs";
 import { parseUser, probe } from "./access.mjs";
-import { applyIdentity } from "./identity.mjs";
+import { applyIdentity, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
 import { pruneSuperseded } from "./images.mjs";
@@ -61,6 +61,8 @@ function writeEnv() {
 writeEnv();
 
 let outputDir = env[config.outputKey];
+// Shared with the app through its data folder; see identity.mjs.
+let identitySecret = "";
 let controlServer = null;
 
 const proxy = httpProxy.createProxyServer({
@@ -408,7 +410,7 @@ async function publicHandler(request, response) {
       unauthorized(response, request);
       return;
     }
-    applyIdentity(request.headers, identity, config.identityHeaders);
+    applyIdentity(request.headers, identity, config.identityHeaders, identitySecret);
     const cookie = auth.stripCookies(request.headers.cookie);
     if (cookie) {
       request.headers.cookie = cookie;
@@ -438,7 +440,7 @@ async function upgradeHandler(request, socket, head) {
       socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       return;
     }
-    applyIdentity(request.headers, identity, config.identityHeaders);
+    applyIdentity(request.headers, identity, config.identityHeaders, identitySecret);
     const cookie = auth.stripCookies(request.headers.cookie);
     if (cookie) {
       request.headers.cookie = cookie;
@@ -750,7 +752,19 @@ async function startControl(port) {
   return server;
 }
 
+async function prepareSecret() {
+  if (!config.identityHeaders || !config.dataDir) return;
+  try {
+    const container = await inspectContainer(config.container);
+    identitySecret = await ensureSecret(path.posix.join(config.dataDir, ".bridge-secret"),
+      parseUser(container?.user));
+  } catch (error) {
+    log("warn", "identity secret could not be prepared", { error: error.message });
+  }
+}
+
 async function main() {
+  await prepareSecret();
   if (config.output) {
     await ensureLink().catch((error) => {
       log("warn", "output link could not be prepared", { error: error.message });

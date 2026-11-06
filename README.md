@@ -202,6 +202,11 @@ The same AirPlay Capture package through DSM Login Portal on an iPhone:
   convention of Authelia and oauth2-proxy, so the app can show per-user data or admin-only
   features without a second sign-in. The bridge always removes these headers from what the
   browser sends, so the app can trust them.
+- The app's port is on localhost, where any other process on the NAS, including containers with
+  host networking, could send `Remote-User` itself. The bridge therefore also sends
+  `X-Bridge-Secret`, a random value it keeps in the app's data folder as `/data/.bridge-secret`,
+  readable only by the app's user. An app should trust the identity headers only when that
+  header matches the file.
 - `authMode: "none"` disables the bridge check for apps that already have their own sign-in.
 
 For host-network apps, bind the app's web UI to `127.0.0.1`. Otherwise the internal port is
