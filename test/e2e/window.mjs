@@ -52,6 +52,15 @@ try {
   check('the title names no state once the app is shown', !title.includes('·'), title);
   check('admin toolbar', hasMenu ? toolbar === 'Manage' : toolbar === 'Open on phones…', toolbar);
 
+  if (hasMenu) {
+    // A click in the app lands in its frame, which DSM's menu handling never sees.
+    await win.locator('.x-toolbar button', { hasText: 'Manage' }).click();
+    await page.locator('.x-menu:visible').first().waitFor();
+    await win.locator(`iframe[src*="/${id}/app.html"]`).click({ position: { x: 5, y: 200 } });
+    await page.waitForTimeout(500);
+    check('a click in the app closes the Manage menu', await page.locator('.x-menu:visible').count() === 0);
+  }
+
   async function menuItem(text) {
     if (hasMenu) {
       await win.locator('.x-toolbar button', { hasText: 'Manage' }).click();

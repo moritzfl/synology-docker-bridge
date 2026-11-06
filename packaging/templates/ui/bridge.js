@@ -248,6 +248,19 @@
       }, cfg);
       this.callParent([config]);
       this.iframeId = iframeId;
+      // A click inside the app lands in its frame, which this page never sees, so an open menu
+      // (Manage or one of DSM's) would stay open. That click moves focus into the frame: close
+      // menus then. Works for frames inside the frame too.
+      function frameFocused() {
+        setTimeout(function () {
+          var frame = document.getElementById(iframeId);
+          if (frame && document.activeElement === frame && Ext.menu && Ext.menu.MenuMgr) {
+            Ext.menu.MenuMgr.hideAll();
+          }
+        }, 0);
+      }
+      window.addEventListener("blur", frameFocused);
+      this.on("destroy", function () { window.removeEventListener("blur", frameFocused); });
       if (standalone) {
         this.refitOnResize();
       }
