@@ -56,8 +56,10 @@
     "phoneOn": "Open {app} on its own, also on phones, at:",
     "phoneOff": "{app} can also open on its own, on phones too, at its own address in Login Portal.",
     "phoneTurnOn": "Turn on",
+    "phoneTurnOff": "Turn off",
     "phoneSettings": "Set the address, port or host name in Control Panel > Login Portal > Applications.",
     "phoneFailed": "The address could not be turned on: {reason}",
+    "phoneOffFailed": "The address could not be turned off: {reason}",
     "phoneButton": "Open on phones…",
     "manage": "Manage",
     "close": "Close"
@@ -119,8 +121,10 @@
     "phoneOn": "{app} allein öffnen, auch auf dem Smartphone, unter:",
     "phoneOff": "{app} lässt sich auch allein öffnen, auch auf dem Smartphone, unter einer eigenen Adresse im Anmeldeportal.",
     "phoneTurnOn": "Einschalten",
+    "phoneTurnOff": "Ausschalten",
     "phoneSettings": "Adresse, Port oder Hostnamen legen Sie unter Systemsteuerung > Anmeldeportal > Anwendungen fest.",
     "phoneFailed": "Die Adresse konnte nicht eingeschaltet werden: {reason}",
+    "phoneOffFailed": "Die Adresse konnte nicht ausgeschaltet werden: {reason}",
     "phoneButton": "Auf Smartphones öffnen…",
     "manage": "Verwalten",
     "close": "Schließen"

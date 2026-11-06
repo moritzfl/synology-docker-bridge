@@ -99,6 +99,21 @@ try {
   const phoneText = (await phone.innerText()).replace(/\s+/g, ' ');
   check('phone dialog shows the address', phoneText.includes(`/${id}/`), phoneText.slice(0, 200));
   await page.screenshot({ path: shot('3-phone') });
+  // DSM regenerates its nginx config a moment after a change
+  const portalStatus = async () => {
+    await page.waitForTimeout(6000);
+    return page.evaluate(async (path) => (await fetch(path, { cache: 'no-store' })).status, `/${id}/`);
+  };
+  await phone.locator('button:has-text("Turn off")').click();
+  await phone.locator('button:has-text("Turn on")').waitFor({ timeout: 30_000 });
+  const offText = (await phone.innerText()).replace(/\s+/g, ' ');
+  const offStatus = await portalStatus();
+  check('turning the address off removes it', !offText.includes(`/${id}/`) && offStatus === 404,
+    `HTTP ${offStatus}`);
+  await phone.locator('button:has-text("Turn on")').click();
+  await phone.locator('button:has-text("Turn off")').waitFor({ timeout: 30_000 });
+  const onStatus = await portalStatus();
+  check('turning it on again brings the address back', onStatus === 200, `HTTP ${onStatus}`);
   await phone.locator('button:has-text("Close")').click();
 
   // 5. a hung app: freeze it from the host (inside, the kernel ignores signals to PID 1)

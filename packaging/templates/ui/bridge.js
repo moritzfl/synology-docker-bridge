@@ -474,9 +474,9 @@
 
     /**
      * Login Portal can give the app an address of its own, which is how it opens on phones. Only
-     * an administrator can turn that on, and DSM keeps it off until someone does; show the
-     * address when it is on, and offer to turn it on here instead of sending people to search
-     * Control Panel.
+     * an administrator can change that, and DSM keeps it off until someone does, like for its own
+     * apps; show the address and let the administrator turn it on or off here instead of
+     * sending people to search Control Panel.
      */
     openPhone: function () {
       var self = this;
@@ -484,17 +484,27 @@
         this.phoneWindow.close();
       }
       var body = new Ext.BoxComponent({ html: "" });
-      var turnOn = new (ux("Button", Ext.Button))({
+      var Button = ux("Button", Ext.Button);
+      // DSM rejects an empty alias; null removes it, and fqdn: null also drops a host name that
+      // was set in Control Panel, so "off" means no own address at all.
+      function change(settings, failure) {
+        self.phoneWindow.getEl().mask(t("applying"));
+        return webapi("SYNO.Core.AppPortal", "set", 2, Ext.apply({ id: APP_ID }, settings))
+          .then(function () { return render(); })
+          .catch(function (error) { render(t(failure, { reason: error.message })); })
+          .then(function () { self.phoneWindow.getEl().unmask(); });
+      }
+      var turnOn = new Button({
         text: t("phoneTurnOn"),
         hidden: true,
         btnStyle: "blue",
-        handler: function () {
-          self.phoneWindow.getEl().mask(t("applying"));
-          webapi("SYNO.Core.AppPortal", "set", 2, { id: APP_ID, alias: PORTAL_ALIAS })
-            .then(function () { return render(); })
-            .catch(function (error) { render(t("phoneFailed", { reason: error.message })); })
-            .then(function () { self.phoneWindow.getEl().unmask(); });
-        },
+        handler: function () { change({ alias: PORTAL_ALIAS }, "phoneFailed"); },
+      });
+      var turnOff = new Button({
+        text: t("phoneTurnOff"),
+        hidden: true,
+        btnStyle: "grey",
+        handler: function () { change({ alias: null, fqdn: null }, "phoneOffFailed"); },
       });
       function paragraph(text, style) {
         return "<p style=\"margin:0 0 10px;" + (style || "") + "\">" + escapeHtml(text) + "</p>";
@@ -520,6 +530,7 @@
           html += paragraph(t("phoneSettings"), "color:#6b7685;font-size:12px");
           body.update(html);
           turnOn.setVisible(!address);
+          turnOff.setVisible(!!address);
         }, function (error) {
           body.update(paragraph(explain(error)));
         });
@@ -533,6 +544,7 @@
         items: [new Ext.Panel({ border: false, bodyStyle: "padding:16px 20px", items: [body] })],
         buttons: [
           turnOn,
+          turnOff,
           {
             xtype: "syno_button",
             btnStyle: "grey",
