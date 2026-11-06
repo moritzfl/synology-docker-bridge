@@ -77,7 +77,7 @@
     },
     "appBuild": {
       "type": "string",
-      "description": "Shell command run in appDir that builds image."
+      "description": "Shell command run in appDir that builds image. SPK_ARCH and SPK_PLATFORM (e.g. linux/arm64) name the target."
     },
     "icon": {
       "type": "string",

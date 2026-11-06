@@ -91,7 +91,8 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | --- | --- |
 | `id` | Package name; also the data share, container, and Login Portal alias. Lowercase and dashes |
 | `icon` | One square SVG, drawn at every size DSM uses. Or `icons`: a folder of ready-made PNGs |
-| `image`, `appBuild` | The local app image to embed, and an optional command that builds it (run in `appDir`) |
+| `image`, `appBuild` | The local app image to embed, and an optional command that builds it (run in `appDir`, with `SPK_PLATFORM` set to the Docker platform, e.g. `linux/arm64`) |
+| `arch` | `x86_64` (default) or `armv8` for ARM models with Container Manager; `--arch` overrides it per build, so one config yields both packages |
 | `containerPort` | Port the app listens on inside its container |
 | `networkMode` | `bridge` (default) or `host`; with `host`, `internalPort` must equal `containerPort` |
 | `appPath` | Web path of the app's UI (`/` or `/app/`) |
@@ -111,7 +112,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 
 Derived when not given: `dsmAppName` (`my-app` → `MyApp`), `container` (`id`), `internalPort` and
 the bridge control port (from `id`, so packages never collide), `bridgeImage` (`<id>-bridge:spk`).
-The generator also accepts `--skip-app-build`, `--skip-bridge-build`, and `--output`.
+The generator also accepts `--arch`, `--skip-app-build`, `--skip-bridge-build`, and `--output`.
 
 Every SPK records the framework version and commit (`0.2.0+<commit>`); the bridge logs it at start
 and reports it in its status.

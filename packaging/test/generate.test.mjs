@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { dsmNameFor, renderTemplates, resolve } from "../generate.mjs";
+import { buildApp, dsmNameFor, renderTemplates, resolve } from "../generate.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packaging = path.dirname(here);
@@ -192,6 +192,26 @@ test("the example config passes --check", () => {
   const output = execFileSync(process.execPath, [path.join(packaging, "generate.mjs"), "--config",
     path.join(packaging, "..", "examples", "nginx", "app.json"), "--check"], { encoding: "utf8" });
   assert.match(output, /dsm-nginx-demo .* is valid/);
+});
+
+test("--arch packages the same config for ARM", () => {
+  const output = execFileSync(process.execPath, [path.join(packaging, "generate.mjs"), "--config",
+    path.join(packaging, "..", "examples", "nginx", "app.json"), "--arch", "armv8", "--check"],
+  { encoding: "utf8" });
+  assert.match(output, /dsm-nginx-demo .* \(armv8\) is valid/);
+});
+
+test("--arch requires a value", () => {
+  assert.throws(() => execFileSync(process.execPath, [path.join(packaging, "generate.mjs"),
+    "--config", path.join(packaging, "..", "examples", "nginx", "app.json"), "--arch", "--check"],
+  { stdio: "pipe" }), /--arch requires an architecture/);
+});
+
+test("the app build is told the package's architecture and Docker platform", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "generate-app-build-"));
+  const config = { appBuild: 'printf "%s %s" "$SPK_ARCH" "$SPK_PLATFORM" > arch.txt', appDir: dir };
+  buildApp(config, { arch: "armv8", platform: "linux/arm64" }, false);
+  assert.equal(fs.readFileSync(path.join(dir, "arch.txt"), "utf8"), "armv8 linux/arm64");
 });
 
 test("builds a complete SPK from a prebuilt image", { skip: !process.env.GENERATE_BUILD_TEST }, () => {

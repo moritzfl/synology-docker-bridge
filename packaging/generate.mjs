@@ -11,16 +11,20 @@ const repo = path.dirname(here);
 const templateDir = path.join(here, "templates");
 
 function usage() {
-  console.error("usage: generate.mjs --config app.json [--check] [--skip-app-build]"
-    + " [--skip-bridge-build] [--output dist]");
+  console.error("usage: generate.mjs --config app.json [--arch x86_64|armv8] [--check]"
+    + " [--skip-app-build] [--skip-bridge-build] [--output dist]");
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const options = { config: "", check: false, skipAppBuild: false, skipBridgeBuild: false, output: "" };
+  const options = { config: "", arch: "", check: false, skipAppBuild: false, skipBridgeBuild: false, output: "" };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--config") options.config = argv[++i] || "";
+    else if (arg === "--arch") {
+      options.arch = argv[++i];
+      if (!options.arch || options.arch.startsWith("--")) throw new Error("--arch requires an architecture");
+    }
     else if (arg === "--check") options.check = true;
     else if (arg === "--skip-app-build") options.skipAppBuild = true;
     else if (arg === "--skip-bridge-build") options.skipBridgeBuild = true;
@@ -219,7 +223,8 @@ function buildBridge(config, platform, skip) {
   ]);
 }
 
-function buildApp(config, skip) {
+/** Runs appBuild with the package's architecture in SPK_ARCH and its Docker platform in SPK_PLATFORM. */
+export function buildApp(config, archInfo, skip) {
   if (skip) return;
   if (config.appBuild) {
     console.log(`==> app build: ${config.appBuild}`);
@@ -227,6 +232,7 @@ function buildApp(config, skip) {
       cwd: path.resolve(config.appDir || process.cwd()),
       stdio: "inherit",
       shell: "/bin/sh",
+      env: { ...process.env, SPK_ARCH: archInfo.arch, SPK_PLATFORM: archInfo.platform },
     });
     return;
   }
@@ -469,15 +475,17 @@ function check(config, values, archInfo) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const configPath = path.resolve(options.config);
-  const { config, values, archInfo } = resolve(JSON.parse(fs.readFileSync(configPath, "utf8")),
-    path.dirname(configPath));
+  const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  // One app.json, one package per architecture.
+  if (options.arch) raw.arch = options.arch;
+  const { config, values, archInfo } = resolve(raw, path.dirname(configPath));
   if (options.check) {
     check(config, values, archInfo);
     return;
   }
   const { id, version } = values;
 
-  buildApp(config, options.skipAppBuild);
+  buildApp(config, archInfo, options.skipAppBuild);
   buildBridge(config, archInfo.platform, options.skipBridgeBuild);
   // Container Manager runs every service without an explicit user as the package's own DSM
   // user, so official images that start as root (nginx, most databases) fail on their first
