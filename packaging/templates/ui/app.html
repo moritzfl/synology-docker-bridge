@@ -214,6 +214,11 @@
           els.frame.src = "proxy/__bridge_login?token=" + encodeURIComponent(session.token);
           els.frame.style.display = "block";
           els.state.style.display = "none";
+          // The DSM window's title still names the state it last saw, such as "starting".
+          var windowId = new URLSearchParams(location.search).get("windowId");
+          if (window.parent !== window && windowId) {
+            window.parent.postMessage({ type: "bridge:shown", windowId: windowId }, location.origin);
+          }
         });
       }
 

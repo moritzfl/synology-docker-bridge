@@ -255,6 +255,15 @@
       // have fired here; ask directly.
       this.loadStatus();
       this.on("show", function () { self.loadStatus(); });
+      function shown(event) {
+        if (event.origin === window.location.origin && event.data
+            && event.data.type === "bridge:shown" && event.data.windowId === windowId) {
+          // The app answered and is on screen; a slow status probe must not call it starting.
+          self.setTitle(NAME);
+        }
+      }
+      window.addEventListener("message", shown);
+      this.on("destroy", function () { window.removeEventListener("message", shown); });
       if (PACKAGE_USER && isAdmin() && !standalone) {
         // Right after installing, the app may not yet be allowed into its folders; say so at once.
         this.checkAccessQuietly();
