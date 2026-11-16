@@ -321,4 +321,4 @@ component. Its control API binds `127.0.0.1` only and requires a bearer token fr
 
 ## License
 
-Apache License 2.0, see [LICENSE](LICENSE).
+MIT License, see [LICENSE](LICENSE).
