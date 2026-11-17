@@ -726,7 +726,9 @@ async function handleControl(request, response) {
   }
   if (request.method === "POST" && url.pathname === "/session") {
     const body = await readJson(request);
-    sendJson(response, 200, { token: auth.mint({ user: body.user, groups: body.groups }) });
+    sendJson(response, 200, {
+      token: auth.mint({ user: body.user, groups: body.groups, name: body.name }),
+    });
     return;
   }
   if (request.method === "POST" && url.pathname === "/revoke") {

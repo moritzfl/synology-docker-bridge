@@ -57,13 +57,17 @@ export function createAuthenticator(config) {
   return {
     mint(identity) {
       prune();
-      const { user = "", groups = [] } =
-        typeof identity === "string" ? { user: identity } : identity || {};
+      const {
+        user = "",
+        groups = [],
+        name = "",
+      } = typeof identity === "string" ? { user: identity } : identity || {};
       const token = crypto.randomBytes(24).toString("base64url");
       oneTime.set(token, {
         user: String(user),
         groups: Array.isArray(groups) ? groups.map(String) : [],
         expiresAt: Date.now() + oneTimeMs,
+        name: String(name || ""),
       });
       return token;
     },
@@ -79,6 +83,7 @@ export function createAuthenticator(config) {
         user: entry.user,
         groups: entry.groups,
         expiresAt: now + sessionMs,
+        name: entry.name,
         verifiedUntil: now + verifyMs,
       });
       return session;
@@ -93,6 +98,7 @@ export function createAuthenticator(config) {
       }
       session.groups = entry.groups;
       session.verifiedUntil = Date.now() + verifyMs;
+      session.name = entry.name;
       return true;
     },
 

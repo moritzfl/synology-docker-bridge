@@ -130,3 +130,12 @@ test("revoking a user ends only that user's sessions", () => {
   assert.equal(auth.authenticate({ headers: { cookie: `dsm_bridge_session=${anna}` } }), null);
   assert.ok(auth.authenticate({ headers: { cookie: `dsm_bridge_session=${bob}` } }));
 });
+
+test("the session carries the DSM full name and a refresh updates it", () => {
+  const auth = createAuthenticator(config());
+  const session = auth.login(auth.mint({ user: "anna", groups: ["users"], name: "Anna A" }));
+  const request = { headers: { cookie: `dsm_bridge_session=${session}` } };
+  assert.equal(auth.authenticate(request).name, "Anna A");
+  assert.ok(auth.refresh(request, auth.mint({ user: "anna", groups: ["users"], name: "Anna B" })));
+  assert.equal(auth.authenticate(request).name, "Anna B");
+});

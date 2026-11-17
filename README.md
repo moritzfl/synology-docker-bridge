@@ -107,7 +107,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `outputLabel`                      | What the folder is called, as text or `{ "enu": …, "ger": … }`                                                                                                                                                                            |
 | `displayNameGer`, `descriptionGer` | German name and Package Center description                                                                                                                                                                                                |
 | `allUsers`                         | `true`: every DSM user may open the app. Default `false`: administrators grant it                                                                                                                                                         |
-| `identityHeaders`                  | `true`: the app receives `Remote-User` and `Remote-Groups` for the signed-in DSM user                                                                                                                                                     |
+| `identityHeaders`                  | `true`: the app receives `Remote-User`, `Remote-Groups` and `Remote-Name` for the signed-in DSM user                                                                                                                                      |
 | `authMode`                         | `token` (default) or `none` for apps with their own sign-in                                                                                                                                                                               |
 
 Derived when not given: `dsmAppName` (`my-app` → `MyApp`), `container` (`id`), `internalPort` and
@@ -199,11 +199,12 @@ The same AirPlay Capture package through DSM Login Portal on an iPhone:
   open side by side. It is stripped before the request reaches the app. The app still sees its
   own cookies; cookies it sets on an absolute path are moved under the proxy path so they never
   land on DSM's own pages.
-- With `identityHeaders: true`, every request reaches the app with `Remote-User: <DSM user>` and
-  `Remote-Groups: <groups>` (comma-separated; administrators are in `administrators`), the
-  convention of Authelia and oauth2-proxy, so the app can show per-user data or admin-only
-  features without a second sign-in. The bridge always removes these headers from what the
-  browser sends, so the app can trust them.
+- With `identityHeaders: true`, every request reaches the app with `Remote-User: <DSM user>`,
+  `Remote-Groups: <groups>` (comma-separated; administrators are in `administrators`) and, when the
+  DSM account has one, `Remote-Name: <full name>`, the convention of Authelia and oauth2-proxy, so
+  the app can show per-user data or admin-only features without a second sign-in. Names that are
+  not ASCII arrive as their UTF-8 bytes. The bridge always removes these headers
+  from what the browser sends, so the app can trust them.
 - The app's port is on localhost, where any other process on the NAS, including containers with
   host networking, could send `Remote-User` itself. The bridge therefore also sends
   `X-Bridge-Secret`, a random value it keeps in the app's data folder as `/data/.bridge-secret`,

@@ -9,6 +9,17 @@ import fs from "node:fs/promises";
 const NAMES = ["remote-user", "remote-groups", "remote-name", "remote-email", "x-bridge-secret"];
 
 /**
+ * DSM names may be any Unicode, which HTTP headers cannot carry as text. Send their UTF-8 bytes;
+ * an app reading the header as Latin-1 (most do) re-decodes it as UTF-8.
+ * Control characters are dropped.
+ */
+export function headerValue(value) {
+  return Buffer.from(String(value).replace(/[\u0000-\u001f\u007f]/g, ""), "utf8").toString(
+    "latin1",
+  );
+}
+
+/**
  * With `secret`, every identified request also carries X-Bridge-Secret. The app's port listens
  * on localhost, where other processes on the NAS (host-network containers among them) could send
  * Remote-User themselves; an app that compares this secret trusts only the bridge.
@@ -22,8 +33,11 @@ export function applyIdentity(headers, identity, enabled, secret = "") {
   if (!enabled || !identity || !identity.user) {
     return;
   }
-  headers["remote-user"] = identity.user;
-  headers["remote-groups"] = (identity.groups || []).join(",");
+  headers["remote-user"] = headerValue(identity.user);
+  headers["remote-groups"] = headerValue((identity.groups || []).join(","));
+  if (identity.name) {
+    headers["remote-name"] = headerValue(identity.name);
+  }
   if (secret) {
     headers["x-bridge-secret"] = secret;
   }

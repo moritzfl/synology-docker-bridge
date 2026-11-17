@@ -102,6 +102,11 @@ json_groups() {
   printf '[%s]' "$list"
 }
 
+# The user's full name as set in DSM (Control Panel > User), empty when none; local users only.
+full_name() {
+  awk -F: -v u="$user" '$1 == u { print $5; exit }' /etc/passwd 2>/dev/null | tr -d '\000-\037'
+}
+
 # Ends the user's open sessions in the app, so revoked access takes effect at once.
 revoke_sessions() {
   var="${SYNOPKG_PKGVAR:-/var/packages/{{id}}/var}"

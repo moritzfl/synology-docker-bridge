@@ -43,3 +43,16 @@ test("sets nothing without a user", () => {
   applyIdentity(headers, { user: "", groups: [] }, true);
   assert.deepEqual(headers, {});
 });
+
+test("passes the DSM full name, and non-ASCII names as UTF-8 bytes", () => {
+  const headers = {};
+  applyIdentity(headers, { user: "łukasz", groups: ["users"], name: "Łukasz Müller\n" }, true);
+  assert.equal(Buffer.from(headers["remote-user"], "latin1").toString("utf8"), "łukasz");
+  assert.equal(Buffer.from(headers["remote-name"], "latin1").toString("utf8"), "Łukasz Müller");
+  for (const value of Object.values(headers)) {
+    assert.match(value, /^[\t\x20-\x7e\x80-\xff]*$/, "valid as an HTTP header value");
+  }
+  const unnamed = {};
+  applyIdentity(unnamed, { user: "anna", groups: [] }, true);
+  assert.equal(unnamed["remote-name"], undefined);
+});
