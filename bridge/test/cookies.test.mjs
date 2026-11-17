@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dropDsmCookies, scopeCookie, scopeCookies, withoutDsmCookies } from "../src/cookies.mjs";
+import {
+  dropDsmCookies,
+  onlyCookies,
+  scopeCookie,
+  scopeCookies,
+  withoutDsmCookies,
+} from "../src/cookies.mjs";
 
 const prefix = "/webman/3rdparty/app/proxy";
 
@@ -43,4 +49,12 @@ test("an app on ports of its own cannot replace DSM's sign-in cookies", () => {
   const none = { "set-cookie": ["csrftoken=1; Path=/"] };
   assert.deepEqual(dropDsmCookies(none), []);
   assert.deepEqual(none["set-cookie"], ["csrftoken=1; Path=/"]);
+});
+
+test("visitors without a session keep only the cookies the app lists", () => {
+  const header = "sessionid=login; csrftoken=abc; id=dsm; theme=dark";
+  assert.equal(onlyCookies(header, ["csrftoken"]), "csrftoken=abc");
+  assert.equal(onlyCookies(header, []), "");
+  assert.equal(onlyCookies("", ["csrftoken"]), "");
+  assert.equal(onlyCookies("csrftokenx=1; csrftoken=2", ["csrftoken"]), "csrftoken=2");
 });

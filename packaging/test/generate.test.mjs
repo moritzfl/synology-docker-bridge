@@ -213,6 +213,36 @@ test("a logo that is not square is centered on a square icon", () => {
   assert.deepEqual(squareIconArgs(100, 2).slice(-2), ["--top", "25"]);
 });
 
+test("on ports of its own, public paths are served at the root, keeping only listed cookies", () => {
+  const raw = {
+    ...minimal,
+    webPorts: { http: 4386, https: 4387 },
+    publicPaths: ["/share/", "/ws/document/"],
+    publicCookies: ["csrftoken"],
+  };
+  const { read, target } = render(raw);
+  assert.doesNotMatch(read("config/dsm.bridge.conf"), /public/, "no prefix on DSM's ports");
+  const compose = read("compose.yml");
+  assert.match(compose, /BRIDGE_PUBLIC_PATHS: "\/share\/,\/ws\/document\/"/);
+  assert.match(compose, /BRIDGE_PUBLIC_COOKIES: "csrftoken"/);
+  const script = path.join(target, "scripts", "bridge-env");
+  const url = execFileSync(
+    "sh",
+    [
+      "-c",
+      `ip() { printf '1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 0\\n'; }; . "$1"; public_url`,
+      "sh",
+      script,
+    ],
+    { encoding: "utf8" },
+  ).trim();
+  assert.equal(url, "http://10.0.0.5:4386", "the app's own HTTP port, at the root");
+  assert.match(render(minimal).read("compose.yml"), /BRIDGE_PUBLIC_COOKIES: ""/);
+  for (const bad of ["csrftoken", ["a b"], ["x;y"]]) {
+    assert.throws(() => resolve({ ...minimal, publicCookies: bad }, here), /publicCookies/);
+  }
+});
+
 test("DSM's own ports are read from its nginx config for the way back from the app's ports", () => {
   const { target } = render(minimal);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-port-"));

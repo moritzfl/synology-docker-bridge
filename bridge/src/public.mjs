@@ -1,7 +1,8 @@
 /**
  * Paths of the app that other devices on the network fetch without a DSM session: a speaker
  * downloading audio, an OAuth provider returning a browser. They are listed in the package
- * config; everything else on the public prefix is not found. The path is normalized first, so
+ * config, a trailing slash allowing the path and everything below it; everything else on the
+ * public prefix is not found. The path is normalized first, so
  * dot segments, backslashes and their encoded forms cannot step out of an allowed prefix.
  */
 export function parsePublicPaths(value) {
@@ -21,10 +22,8 @@ export function publicTarget(url, allowed) {
   }
   const pathname = parsed.pathname;
   if (/%2f|%5c|%00/i.test(pathname)) return null;
-  const permitted = allowed.some((prefix) =>
-    prefix.endsWith("/")
-      ? pathname.startsWith(prefix) && pathname.length > prefix.length
-      : pathname === prefix,
+  const permitted = allowed.some(
+    (prefix) => pathname === prefix || (prefix.endsWith("/") && pathname.startsWith(prefix)),
   );
   return permitted ? pathname + parsed.search : null;
 }

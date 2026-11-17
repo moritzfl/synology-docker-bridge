@@ -58,6 +58,12 @@ export function loadConfig(env = process.env) {
     dataDir: env.BRIDGE_DATA_DIR || "",
     sharesDir: env.BRIDGE_SHARES_DIR || "",
     publicPaths: parsePublicPaths(env.BRIDGE_PUBLIC_PATHS),
+    // The app's own cookies that visitors without a session keep on public paths, e.g. a CSRF
+    // cookie; every other cookie is removed there.
+    publicCookies: String(env.BRIDGE_PUBLIC_COOKIES || "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
     // The app is at the root of an address of its own (webPorts) rather than under DSM's.
     ownOrigin: env.BRIDGE_OWN_ORIGIN === "true",
     sessionCookie: env.BRIDGE_SESSION_COOKIE || "dsm_bridge_session",

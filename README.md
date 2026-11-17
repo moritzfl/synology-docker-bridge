@@ -98,7 +98,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `appPath`                          | Web path of the app's UI (`/` or `/app/`)                                                                                                                                                                                                 |
 | `appUser`                          | User the app runs as. Default: the image's own, like `docker run` (root when the image sets none). `package`: the package's own DSM user; see [Which folders the app may use](#which-folders-the-app-may-use)                             |
 | `init`                             | `true`: a minimal init in the app container reaps orphaned child processes (`docker run --init`)                                                                                                                                          |
-| `publicPaths`                      | App paths devices may fetch without signing in, e.g. `["/media/"]`; see [Paths without sign-in](#paths-without-sign-in)                                                                                                                   |
+| `publicPaths`                      | App paths visitors may fetch without signing in, e.g. `["/media/"]`; see [Paths without sign-in](#paths-without-sign-in)                                                                                                                  |
 | `hostTimezone`                     | Default `true`: `TZ` names the NAS time zone, e.g. `Europe/Berlin`, read on install and upgrade. An app's own `TZ` in `appEnv` wins                                                                                                       |
 | `appEnv`                           | Extra environment; `${APP_CONTAINER_PORT}` and `${APP_OUTPUT_CONTAINER_DIR}` are filled in                                                                                                                                                |
 | `dataDir`                          | Host folder mounted at `/data`. Default: the package's own shared folder (administrators only), on whichever volume DSM created it                                                                                                        |
@@ -110,6 +110,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `identityHeaders`                  | `true`: the app receives `Remote-User`, `Remote-Groups` and `Remote-Name` for the signed-in DSM user                                                                                                                                      |
 | `webPorts`                         | `{ "http": …, "https": … }` for apps that only work at the root of an address; see [Apps on ports of their own](#apps-on-ports-of-their-own)                                                                                              |
 | `files`                            | Files the package brings for an unmodified image, mounted read-only: `{ "/data/settings.py": "settings.py" }`                                                                                                                             |
+| `publicCookies`                    | The app's cookies visitors without a session keep on `publicPaths`, e.g. `["csrftoken"]`                                                                                                                                                  |
 | `authMode`                         | `token` (default) or `none` for apps with their own sign-in                                                                                                                                                                               |
 
 Derived when not given: `dsmAppName` (`my-app` → `MyApp`), `container` (`id`), `internalPort` and
@@ -236,23 +237,33 @@ server, for example `https://<nas>:4387/`:
   the window says so and names the port instead of showing an empty frame.
 - Browsers send DSM's sign-in cookies to every port of the NAS. The bridge removes them before
   requests reach the app, and drops cookies the app tries to set under their names.
+- `publicPaths` are served there too, at the root, to visitors without a session; see below.
 - The app runs at the root of its address on the same host as DSM; script in it can still reach
   DSM's web API from the user's browser, so the same trust applies as below.
 
 ## Paths without sign-in
 
-Some apps hand other devices a link: a speaker downloads audio, an OAuth provider sends a browser
-back. Those devices have no DSM session. `publicPaths` lists exactly those app paths, and DSM's
-nginx serves them at `http://<nas>:<dsm-port>/webman/3rdparty/<id>/public/…`, on DSM's own ports,
-so the app still needs no port of its own:
+Some apps hand other devices or people a link: a speaker downloads audio, an OAuth provider sends
+a browser back, someone outside gets a share link to a document. They have no DSM session.
+`publicPaths` lists exactly those app paths. DSM's nginx serves them at
+`http://<nas>:<dsm-port>/webman/3rdparty/<id>/public/…` on DSM's own ports, or, for an app with
+[ports of its own](#apps-on-ports-of-their-own), at the root of those ports, next to everything
+else; requests there with a session reach the app signed in as usual:
 
-- Only the listed paths reach the app; a trailing slash allows everything below it. Every other
-  path is not found. Dot segments and encoded separators are resolved before the check.
-- Requests carry no identity headers and no cookies, so the app sees them as anonymous. Keep
-  these paths unguessable or harmless, for example a random token per file.
+- Only the listed paths reach the app; a trailing slash allows the path and everything below it.
+  Every other path is not found, or, on the app's own ports, sends people to DSM's sign-in. Dot
+  segments and encoded separators are resolved before the check. WebSockets count too on the
+  app's own ports.
+- Requests carry no identity headers, so the app sees them as anonymous, and no cookies except
+  those listed in `publicCookies`, such as a CSRF cookie the app's pages need. The app's own login
+  cookie is never among them: it would let someone keep using the app after DSM took the
+  privilege away. Keep these paths unguessable or harmless, or let the app check access itself,
+  as with a share token.
 - No buffering: what the app writes reaches the device as it is written, for streamed audio.
 - The app gets `APP_PUBLIC_URL` (also as `${APP_PUBLIC_URL}` in `appEnv`): the NAS's LAN address
-  on DSM's HTTP port plus the prefix, found on install and upgrade.
+  on DSM's HTTP port plus the prefix, or on the app's own HTTP port, found on install and upgrade.
+- People outside the home network reach these paths only where the NAS is reachable from there,
+  for example through port forwarding on the router; DSM lists the ports under the app's name.
 - DSM's "redirect HTTP to HTTPS" setting does not affect these paths: DSM redirects in its sign-in
   page, not in nginx. Devices that only accept HTTPS need a certificate they trust on DSM's
   HTTPS port.

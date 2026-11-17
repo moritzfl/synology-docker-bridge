@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import httpProxy from "http-proxy";
 import { createAuthenticator } from "./auth.mjs";
 import { loadConfig } from "./config.mjs";
-import { dropDsmCookies, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
+import { dropDsmCookies, onlyCookies, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
 import { parseUser, probe } from "./access.mjs";
 import { publicTarget } from "./public.mjs";
 import { dsmAddress } from "./address.mjs";
@@ -102,6 +102,26 @@ proxy.on("proxyRes", (proxyResponse, request) => {
     if (dropped.length) log("warn", "app cookies named like DSM's were dropped", { dropped });
   }
 });
+
+/**
+ * A visitor without a session on one of the app's public paths: no identity headers, and of the
+ * cookies only those the app lists. In particular not the app's own login cookie, which could
+ * otherwise outlast a revoked DSM privilege.
+ */
+function makeAnonymous(request) {
+  applyIdentity(request.headers, null, false);
+  const cookie = onlyCookies(request.headers.cookie, config.publicCookies);
+  if (cookie) {
+    request.headers.cookie = cookie;
+  } else {
+    delete request.headers.cookie;
+  }
+}
+
+/** On the app's own ports, a public path the app may serve without a session; else null. */
+function ownPublicTarget(request) {
+  return config.ownOrigin ? publicTarget(request.url, config.publicPaths) : null;
+}
 
 /** The request's cookies the app may see: none of the bridge's, and none of DSM's. */
 function appCookies(header) {
@@ -449,6 +469,14 @@ async function publicHandler(request, response) {
     }
     const identity = auth.authenticate(request);
     if (!identity) {
+      const target = ownPublicTarget(request);
+      if (target && ["GET", "HEAD", "POST"].includes(request.method)) {
+        makeAnonymous(request);
+        request.url = target;
+        request._bridgePrefix = "";
+        proxy.web(request, response);
+        return;
+      }
       unauthorized(response, request);
       return;
     }
@@ -490,8 +518,7 @@ function anonymousHandler(request, response) {
     response.end("Not found\n");
     return;
   }
-  applyIdentity(request.headers, null, false);
-  delete request.headers.cookie;
+  makeAnonymous(request);
   request._bridgePrefix = forwardedPrefix(request);
   delete request.headers["x-forwarded-prefix"];
   request.url = target;
@@ -502,6 +529,14 @@ async function upgradeHandler(request, socket, head) {
   try {
     const identity = auth.authenticate(request);
     if (!identity) {
+      const target = ownPublicTarget(request);
+      if (target) {
+        makeAnonymous(request);
+        request.url = target;
+        delete request.headers["x-forwarded-prefix"];
+        proxy.ws(request, socket, head);
+        return;
+      }
       socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       return;
     }

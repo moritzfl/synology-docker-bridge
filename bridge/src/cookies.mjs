@@ -67,3 +67,15 @@ export function dropDsmCookies(headers) {
   }
   return cookies.filter((cookie) => DSM_COOKIES.has(cookieName(cookie))).map(cookieName);
 }
+
+/** Only the named cookies, for visitors without a session on the app's public paths. */
+export function onlyCookies(header, names) {
+  if (!header || !names.length) {
+    return "";
+  }
+  return header
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part && names.includes(cookieName(part)))
+    .join("; ");
+}

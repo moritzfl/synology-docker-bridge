@@ -55,6 +55,7 @@ services:
       BRIDGE_DATA_DIR: /run/app-data
       BRIDGE_SHARES_DIR: /run/shares
       BRIDGE_PUBLIC_PATHS: "{{publicPaths}}"
+      BRIDGE_PUBLIC_COOKIES: "{{publicCookies}}"
       BRIDGE_OWN_ORIGIN: "{{ownOrigin}}"
       BRIDGE_SESSION_COOKIE: "{{sessionCookie}}"
       BRIDGE_APP_ID: "SYNO.SDS.{{dsmAppName}}.Instance"

@@ -107,7 +107,12 @@
     "publicPaths": {
       "type": "array",
       "items": { "type": "string", "pattern": "^/[A-Za-z0-9._~/-]*$" },
-      "description": "App paths that devices on the network may fetch without a DSM session, such as audio for speakers, served at /webman/3rdparty/<id>/public/ on DSM's ports. A trailing slash allows everything below it. The app learns the full address from APP_PUBLIC_URL."
+      "description": "App paths that devices on the network may fetch without a DSM session, such as audio for speakers, served at /webman/3rdparty/<id>/public/ on DSM's ports, or at the root of the app's own ports with webPorts. A trailing slash allows the path and everything below it. The app learns the full address from APP_PUBLIC_URL."
+    },
+    "publicCookies": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+      "description": "The app's own cookies that visitors without a session keep on publicPaths, e.g. a CSRF cookie. All other cookies, the app's login cookie among them, are removed there."
     },
     "webPorts": {
       "type": "object",

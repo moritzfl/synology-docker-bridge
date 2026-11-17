@@ -13,6 +13,11 @@ test("passes allowed paths with their query", () => {
   assert.equal(publicTarget("/media/abc?format=flac", allowed), "/media/abc?format=flac");
   assert.equal(publicTarget("/media/live/abc", allowed), "/media/live/abc");
   assert.equal(
+    publicTarget("/media/", allowed),
+    "/media/",
+    "the listed path itself, e.g. /api/jsi18n/",
+  );
+  assert.equal(
     publicTarget("/mcp/oauth/callback?state=1&code=2", allowed),
     "/mcp/oauth/callback?state=1&code=2",
   );
@@ -23,7 +28,6 @@ test("refuses everything else", () => {
     "/",
     "/login",
     "/media",
-    "/media/",
     "/mediax/a",
     "/mcp/oauth/callback/x",
     "/VAADIN/push",

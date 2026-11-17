@@ -534,6 +534,13 @@ export function resolve(raw, configDir) {
       "publicPaths must be app paths such as /media/ (a trailing slash allows everything below)",
     );
   }
+  const publicCookies = config.publicCookies || [];
+  if (
+    !Array.isArray(publicCookies) ||
+    publicCookies.some((name) => typeof name !== "string" || !/^[A-Za-z0-9_.-]+$/.test(name))
+  ) {
+    throw new Error('publicCookies must be cookie names, e.g. ["csrftoken"]');
+  }
   const publicPrefix = `/webman/3rdparty/${id}/public`;
 
   let appPath = config.appPath || "/";
@@ -624,8 +631,12 @@ export function resolve(raw, configDir) {
     appInit: config.init === true ? "    init: true" : "",
     packageUser: packageUser(config) ? "true" : "false",
     publicPaths: publicPaths.join(","),
-    publicPrefix: publicPaths.length ? publicPrefix : "",
-    publicLocation: publicPaths.length ? publicLocation(id, config.controlPort) : "",
+    // With ports of its own the app serves its public paths there, at the root; else under
+    // a prefix on DSM's ports.
+    publicPrefix: publicPaths.length && !webPorts ? publicPrefix : "",
+    publicPort: publicPaths.length && webPorts ? webPorts.http : "",
+    publicLocation: publicPaths.length && !webPorts ? publicLocation(id, config.controlPort) : "",
+    publicCookies: publicCookies.join(","),
     // With ports of its own the app is at the root of another address on the same host. Cookies
     // do not tell ports apart, so each package's session cookie gets its own name.
     webPortsJson: scriptJson(webPorts),

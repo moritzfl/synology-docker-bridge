@@ -71,7 +71,8 @@ host_timezone() {
 # HTTP port. Empty when the package has none, or when either cannot be found.
 public_url() {
     prefix="{{publicPrefix}}"
-    [ -n "$prefix" ] || return 0
+    own_port="{{publicPort}}"
+    [ -n "$prefix" ] || [ -n "$own_port" ] || return 0
     address="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)"
     if [ -z "$address" ]; then
         address="$(ip -4 -o addr show scope global 2>/dev/null | grep -v docker | sed -n 's/.* inet \([0-9.]*\)\/.*/\1/p' | head -1)"
@@ -81,6 +82,8 @@ public_url() {
         ''|*[!0-9.]*) return 0 ;;
     esac
     valid_port "$port" || port=5000
+    # Apps on ports of their own serve their public paths there, at the root.
+    [ -n "$own_port" ] && port="$own_port"
     printf 'http://%s:%s%s\n' "$address" "$port" "$prefix"
 }
 
