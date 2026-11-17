@@ -1,13 +1,15 @@
-# Dependencies are installed with npm in a throwaway stage; the runtime is Alpine's own Node.js
-# without npm, yarn, the Docker CLI or Compose. The bridge talks to the Engine API over the
-# mounted socket, so the image stays at about a third of a node:22-alpine + docker-cli image.
-FROM node:22-alpine AS deps
+# Alpine 3.24 ships Node 26 as nodejs-current. Keep the major pinned to the chosen LTS.
+FROM alpine:3.24 AS base
+RUN apk add --no-cache 'nodejs-current~26'
+
+# npm is only needed to install dependencies, not in the runtime.
+FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+RUN apk add --no-cache npm \
+    && npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
-FROM alpine:3.22
-RUN apk add --no-cache nodejs
+FROM base
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./

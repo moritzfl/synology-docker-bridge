@@ -53,7 +53,7 @@ the bridge's.
 
 ## Quick start
 
-Requirements: Node.js 22, Docker with buildx, `rsvg-convert` for SVG icons
+Requirements: Node.js 26 LTS, Docker with buildx, `rsvg-convert` for SVG icons
 (`brew install librsvg`).
 
 ```sh

@@ -9,6 +9,6 @@
     "check": "node packaging/generate.mjs --check --config"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=26"
   }
 }
