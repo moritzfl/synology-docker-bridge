@@ -321,6 +321,10 @@ component. Its control API binds `127.0.0.1` only and requires a bearer token fr
 - Real phones: the Home Screen name and icon are checked in an emulated iPhone; check a real one
   when it matters.
 
+Dependency updates are configured in `renovate.json` for npm packages, Docker images, and GitHub
+Actions. Give the [Mend Renovate GitHub App](https://github.com/apps/renovate) access to this
+repository to receive update PRs. Updates are not merged automatically.
+
 ## License
 
 MIT License, see [LICENSE](LICENSE).
