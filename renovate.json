@@ -6,17 +6,24 @@
   "automerge": false,
   "packageRules": [
     {
-      "description": "New Node.js majors require updating CI, the supported minimum, and the bridge runtime together.",
-      "matchPackageNames": ["node", "actions/node-versions", "nodejs-current"],
+      "description": "Review Node.js major upgrades manually for compatibility with older DSM kernels.",
+      "matchPackageNames": ["node", "actions/node-versions"],
       "matchUpdateTypes": ["major"],
       "enabled": false
     },
     {
-      "description": "Upgrade the bridge's Alpine release together with the Node.js package it ships.",
+      "description": "Keep the bridge on the Alpine release that supplies its Node 22 runtime.",
       "matchManagers": ["dockerfile"],
       "matchFileNames": ["bridge/Dockerfile"],
       "matchPackageNames": ["alpine"],
       "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
+    },
+    {
+      "description": "Leave the APK Node major constraint in place; Alpine supplies patches within it.",
+      "matchManagers": ["dockerfile"],
+      "matchFileNames": ["bridge/Dockerfile"],
+      "matchDepNames": ["nodejs"],
       "enabled": false
     }
   ]

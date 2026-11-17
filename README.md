@@ -53,8 +53,8 @@ the bridge's.
 
 ## Quick start
 
-Requirements: Node.js 26 LTS, Docker with buildx, `rsvg-convert` for SVG icons
-(`brew install librsvg`).
+Requirements: Node.js 22 or newer (26 LTS recommended for development), Docker with buildx,
+and `rsvg-convert` for SVG icons (`brew install librsvg`).
 
 ```sh
 (cd bridge && npm ci)
@@ -310,6 +310,10 @@ component. Its control API binds `127.0.0.1` only and requires a bearer token fr
 - There is no install wizard. The output folder is changed in the window.
 
 ## Verification
+
+CI tests Node.js 22 and 26. The bridge container stays on Node.js 22: containers share DSM's
+kernel, and [Node.js 26 lists Linux 6.12 or newer for x64 Alpine/musl](https://github.com/nodejs/node/blob/v26.13.1/BUILDING.md#platform-list).
+Virtual DSM 7.2.2 uses Linux 4.4.
 
 - `npm ci` installs the formatting tool. Run `npm run format` to apply Prettier and
   `npm run format:check` to check formatting as CI does. DSM packaging templates are excluded.
