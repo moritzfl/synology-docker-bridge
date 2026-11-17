@@ -39,6 +39,7 @@ second package adds the side-by-side session check. The round:
 | `public.mjs <id> <path>` | For apps with `publicPaths`: from outside the NAS, without a session, on DSM's HTTP and HTTPS ports, the allowed path reaches the app and other paths, also with dot segments and encoded separators, get the bridge's Not found |
 | `rights.mjs <id> <class> [<id2> <class2>]` | Per-package cookies side by side; a non-admin user without the privilege is refused, also by URL; granted, the app opens and `Remote-User` names them while forged headers are dropped; revoked, the next open is refused and the open session ends on its re-check; German for a German browser |
 | `portal.mjs <id>` | The Login Portal address on desktop Chrome and an iPhone: the app on its own, the window as wide as the device, the app's Home Screen icon, Sign Out in the account menu |
+| `airplay-layout.mjs [--portal]` | With AirPlay Capture installed: desktop window drag-resize, settings scrolling inside the app frame, maximize/restore, and reopen on Chromium and WebKit. With its Login Portal address enabled, also test WebKit phone orientation and scrolling. |
 
 Screenshots go to `output/`. `GUEST_TIMEOUT_MS` raises the guest command timeout for slow
 installs under emulation.
