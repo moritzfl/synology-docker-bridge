@@ -111,6 +111,8 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `webPorts`                         | `{ "http": …, "https": … }` for apps that only work at the root of an address; see [Apps on ports of their own](#apps-on-ports-of-their-own)                                                                                              |
 | `files`                            | Files the package brings for an unmodified image, mounted read-only: `{ "/data/settings.py": "settings.py" }`                                                                                                                             |
 | `publicCookies`                    | The app's cookies visitors without a session keep on `publicPaths`, e.g. `["csrftoken"]`                                                                                                                                                  |
+| `command`                          | Start command for the unmodified image, e.g. a script brought in with `files` that then runs the image's own                                                                                                                              |
+| `configFile`                       | A settings file in the data folder that administrators edit in the window; see [Settings](#settings)                                                                                                                                      |
 | `authMode`                         | `token` (default) or `none` for apps with their own sign-in                                                                                                                                                                               |
 
 Derived when not given: `dsmAppName` (`my-app` → `MyApp`), `container` (`id`), `internalPort` and
@@ -245,6 +247,27 @@ server, for example `https://<nas>:4387/`:
 - The app runs at the root of its address on the same host as DSM; script in it can still reach
   DSM's web API from the user's browser, so the same trust applies as below.
 
+## Settings
+
+Many images read settings from a file in their data folder. `configFile` names that file, and
+administrators edit it in the window: **Manage → Settings…** (the name is `configFile.label`).
+Nobody needs File Station, a text editor package, or a terminal, and a mistake never leaves the
+app unusable:
+
+- **Check first**: with `configFile.check`, saving runs that command in the app's container on the
+  new text (`{file}` is its path there), before anything changes. A failing check shows its
+  output next to the text, and the file stays as it was. Output of a passing check is shown as
+  notes after the app restarts.
+- **Restart and watch**: the saved file takes effect when the app restarts. The window shows the
+  restart, and the bridge watches the app: it must be up and stay up for 30 seconds in the same
+  container. Up means it answers, or, with `configFile.ready`, that this command succeeds in the
+  app's container, for apps that show a maintenance page while they set up.
+- **Undo**: if it does not, the bridge puts the previous file back and restarts the app again. The
+  editor reopens with the administrator's text and what the app logged, so it can be fixed.
+- Someone else saving in the meantime is detected; the editor says so instead of overwriting.
+- The file is the app's own: it stays in the data folder across upgrades and can still be edited
+  there directly, without the check.
+
 ## Paths without sign-in
 
 Some apps hand other devices or people a link: a speaker downloads audio, an OAuth provider sends
@@ -319,6 +342,8 @@ component. With `identityHeaders`, it also reads `/etc` (read-only) for DSM's us
   existing entries with `mv` (cross-volume safe), repoints `<parent>/.<id>-folder`, writes `.env`,
   and starts the app again. The container is not recreated, so Container Manager keeps its IDs.
 - **Restart**: restarts the app container.
+- **Settings**: reads and writes the app's settings file, runs its check in the app's container
+  (Docker exec), and restores the previous file when the app does not come back.
 - **Status**: container state plus a real HTTP probe of the app.
 - **State**: writes both `/compose/.env` (Compose substitution) and `/run/bridge/app.env`
   (survives package upgrades).

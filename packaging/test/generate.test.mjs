@@ -176,6 +176,63 @@ test("apps that need the root of an address get ports of their own on DSM's ngin
   );
 });
 
+test("a start command replaces the image's own, with $ kept literal for Compose", () => {
+  const { read } = render({ ...minimal, command: ["/bin/sh", "-c", "echo $HOME && run"] });
+  assert.match(read("compose.yml"), /^ {4}command: \["\/bin\/sh","-c","echo \$\$HOME && run"\]$/m);
+  assert.doesNotMatch(render(minimal).read("compose.yml"), /command:/);
+  for (const bad of [[], "run.sh", [""], [1]]) {
+    assert.throws(
+      () => resolve({ ...minimal, command: bad }, here),
+      /command/,
+      JSON.stringify(bad),
+    );
+  }
+});
+
+test("a settings file gets its menu item, its check command and its own CGI", () => {
+  const { read } = render({
+    ...minimal,
+    configFile: {
+      path: "conf/app.yaml",
+      check: ["check", "--file", "{file}"],
+      ready: ["probe", "--json"],
+    },
+  });
+  const compose = read("compose.yml");
+  assert.match(compose, /BRIDGE_CONFIG_FILE: "conf\/app\.yaml"/);
+  const check = /BRIDGE_CONFIG_CHECK: (.*)$/m.exec(compose)[1];
+  assert.deepEqual(JSON.parse(JSON.parse(check)), ["check", "--file", "{file}"]);
+  const ready = /BRIDGE_CONFIG_READY: (.*)$/m.exec(compose)[1];
+  assert.deepEqual(JSON.parse(JSON.parse(ready)), ["probe", "--json"]);
+  assert.match(
+    read("ui/bridge.js"),
+    /var CONFIG_LABEL = \{"enu":"Settings","ger":"Einstellungen"\};/,
+  );
+  execFileSync("sh", ["-n", path.join(render(minimal).target, "ui", "config.cgi")]);
+  // DSM's AppWindow keeps its launch parameters in openConfig on every window.
+  assert.doesNotMatch(read("ui/bridge.js"), /^\s+openConfig:/m);
+
+  const plain = render({ ...minimal, configFile: "settings.json" });
+  assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_CHECK: "\[\]"/);
+  const none = render(minimal);
+  assert.match(none.read("compose.yml"), /BRIDGE_CONFIG_FILE: ""/);
+  assert.match(none.read("ui/bridge.js"), /var CONFIG_LABEL = null;/);
+  for (const bad of [
+    "../x",
+    "/etc/passwd",
+    "a/../b",
+    ".hidden",
+    { check: ["x"] },
+    { path: "a", check: [] },
+  ]) {
+    assert.throws(
+      () => resolve({ ...minimal, configFile: bad }, here),
+      /configFile/,
+      JSON.stringify(bad),
+    );
+  }
+});
+
 test("files the package brings are mounted read-only into the unmodified image", () => {
   const { read } = render({
     ...minimal,

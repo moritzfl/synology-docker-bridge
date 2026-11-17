@@ -16,8 +16,23 @@ export class DockerError extends Error {
   }
 }
 
+/**
+ * Output of a container without a TTY: frames of an 8-byte header (stream, three zero bytes,
+ * big-endian length) and the payload. Returns the payloads joined, stdout and stderr in order.
+ */
+export function demux(buffer) {
+  const parts = [];
+  let offset = 0;
+  while (offset + 8 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset + 4);
+    parts.push(buffer.subarray(offset + 8, offset + 8 + length));
+    offset += 8 + length;
+  }
+  return Buffer.concat(parts).toString("utf8");
+}
+
 export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 60_000 } = {}) {
-  function request(method, path, { timeout = timeoutMs } = {}) {
+  function request(method, path, { timeout = timeoutMs, body, raw = false } = {}) {
     return new Promise((resolve, reject) => {
       const req = http.request(
         {
@@ -30,6 +45,10 @@ export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 
           const chunks = [];
           response.on("data", (chunk) => chunks.push(chunk));
           response.on("end", () => {
+            if (raw) {
+              resolve({ status: response.statusCode, body: Buffer.concat(chunks) });
+              return;
+            }
             const text = Buffer.concat(chunks).toString("utf8");
             let body = null;
             if (text) {
@@ -48,7 +67,7 @@ export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 
         req.destroy(new DockerError(504, `docker ${method} ${path} timed out`));
       });
       req.on("error", reject);
-      req.end();
+      req.end(body === undefined ? undefined : JSON.stringify(body));
     });
   }
 
@@ -96,6 +115,37 @@ export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 
         { timeout: (seconds + 60) * 1000 },
       );
       if (response.status !== 204) throw fail(response, `restart ${container}`);
+    },
+
+    /** The container's last log lines, stdout and stderr together, since a Unix time. */
+    async logs(container, { since = 0, tail = 60 } = {}) {
+      const response = await request(
+        "GET",
+        `/containers/${name(container)}/logs?stdout=1&stderr=1&since=${since}&tail=${tail}`,
+        { timeout: 15_000, raw: true },
+      );
+      if (response.status !== 200) return "";
+      return demux(response.body);
+    },
+
+    /** Runs a command in the running container and returns its exit code and output. */
+    async exec(container, command, { timeout = 60_000 } = {}) {
+      const created = await request("POST", `/containers/${name(container)}/exec`, {
+        timeout: 15_000,
+        body: { Cmd: command, AttachStdout: true, AttachStderr: true, Tty: false },
+      });
+      if (created.status !== 201) throw fail(created, `exec in ${container}`);
+      const id = created.body.Id;
+      const started = await request("POST", `/exec/${name(id)}/start`, {
+        timeout,
+        raw: true,
+        body: { Detach: false, Tty: false },
+      });
+      if (started.status !== 200) {
+        throw new DockerError(started.status, `exec in ${container}: HTTP ${started.status}`);
+      }
+      const inspected = await request("GET", `/exec/${name(id)}/json`, { timeout: 15_000 });
+      return { exitCode: inspected.body?.ExitCode ?? -1, output: demux(started.body) };
     },
 
     /**

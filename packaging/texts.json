@@ -78,7 +78,20 @@
     "accessHint": "Permissions… opens DSM’s own permission settings. Allow {user} Read/Write there and save; this list checks again when you close them.",
     "accessManual": "Open Control Panel > Shared Folder, edit the shared folder of {path}, open Permissions, choose System internal user and allow {user} Read/Write. For a folder inside it, use File Station > Properties > Permission.",
     "accessShareClosed": "No access to the shared folder {share}",
-    "unreachable": "This computer cannot reach {app} on port {port}. If the DSM firewall is on, allow {app} in Control Panel > Security > Firewall."
+    "unreachable": "This computer cannot reach {app} on port {port}. If the DSM firewall is on, allow {app} in Control Panel > Security > Firewall.",
+    "configIntro": "These settings are the file {file} in the shared folder {share}. Saving checks them and restarts {app}. If {app} does not start with them, the previous settings come back.",
+    "configSave": "Save and restart",
+    "configChecking": "Checking the settings…",
+    "configApplying": "Applying the new settings…",
+    "configRestoring": "{app} did not start with the new settings. Restoring the previous ones…",
+    "configRejected": "{app} cannot use these settings, so nothing was changed:",
+    "configRestored": "{app} did not start with these settings, so the previous settings are back. {app} reported:",
+    "configFailed": "{app} did not start, not even with the previous settings. {app} reported:",
+    "configNotes": "{app} uses the new settings, with these notes:",
+    "configChanged": "Someone else saved the settings in the meantime. Copy your changes, close this window and open the settings again.",
+    "configBusy": "Settings are being applied right now. Try again in a moment.",
+    "configTooLarge": "The settings file is too large to edit here.",
+    "configNotAFile": "The settings file is not a regular file and cannot be edited here."
   },
   "ger": {
     "opening": "{app} wird geöffnet",
@@ -159,6 +172,19 @@
     "accessHint": "Berechtigungen… öffnet die Berechtigungseinstellungen von DSM. Erlauben Sie dort {user} Lesen/Schreiben und speichern Sie; beim Schließen wird erneut geprüft.",
     "accessManual": "Öffnen Sie Systemsteuerung > Gemeinsamer Ordner, bearbeiten Sie den gemeinsamen Ordner von {path}, öffnen Sie Berechtigungen, wählen Sie Systeminterner Benutzer und erlauben Sie {user} Lesen/Schreiben. Für einen Ordner darin: File Station > Eigenschaften > Berechtigung.",
     "accessShareClosed": "Kein Zugriff auf den gemeinsamen Ordner {share}",
-    "unreachable": "Dieser Computer erreicht {app} auf Port {port} nicht. Wenn die DSM-Firewall aktiv ist, erlauben Sie {app} unter Systemsteuerung > Sicherheit > Firewall."
+    "unreachable": "Dieser Computer erreicht {app} auf Port {port} nicht. Wenn die DSM-Firewall aktiv ist, erlauben Sie {app} unter Systemsteuerung > Sicherheit > Firewall.",
+    "configIntro": "Diese Einstellungen sind die Datei {file} im gemeinsamen Ordner {share}. Beim Speichern werden sie geprüft und {app} startet neu. Startet {app} damit nicht, gelten wieder die vorherigen Einstellungen.",
+    "configSave": "Speichern und neu starten",
+    "configChecking": "Einstellungen werden geprüft…",
+    "configApplying": "Die neuen Einstellungen werden übernommen…",
+    "configRestoring": "{app} startet mit den neuen Einstellungen nicht. Die vorherigen werden wiederhergestellt…",
+    "configRejected": "{app} kann diese Einstellungen nicht verwenden, daher wurde nichts geändert:",
+    "configRestored": "{app} startet mit diesen Einstellungen nicht, daher gelten wieder die vorherigen. Meldung von {app}:",
+    "configFailed": "{app} startet nicht, auch nicht mit den vorherigen Einstellungen. Meldung von {app}:",
+    "configNotes": "{app} verwendet die neuen Einstellungen, mit diesen Hinweisen:",
+    "configChanged": "Jemand anderes hat die Einstellungen inzwischen gespeichert. Kopieren Sie Ihre Änderungen, schließen Sie dieses Fenster und öffnen Sie die Einstellungen erneut.",
+    "configBusy": "Gerade werden Einstellungen übernommen. Versuchen Sie es gleich noch einmal.",
+    "configTooLarge": "Die Einstellungsdatei ist zu groß, um sie hier zu bearbeiten.",
+    "configNotAFile": "Die Einstellungsdatei ist keine normale Datei und kann hier nicht bearbeitet werden."
   }
 }

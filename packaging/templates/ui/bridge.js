@@ -13,6 +13,8 @@
   var OUTPUT_LABEL = {{outputLabelJson}};
   // Where folders may be; the package may have fallen back to its own share on this NAS.
   var OUTPUT_PARENT = "{{outputParent}}";
+  // The app's settings file, which administrators edit here; null when the package has none.
+  var CONFIG_LABEL = {{configLabelJson}};
   var APP_ID = "SYNO.SDS.{{dsmAppName}}.Instance";
   var PORTAL_ALIAS = "{{id}}";
   var TEXTS = {{texts}};
@@ -37,6 +39,10 @@
     return OUTPUT_LABEL[LANG] || OUTPUT_LABEL.enu;
   }
 
+  function configLabel() {
+    return CONFIG_LABEL[LANG] || CONFIG_LABEL.enu;
+  }
+
   // Short, human explanations instead of raw helper codes.
   var ERRORS = {
     auth: "error.auth",
@@ -47,6 +53,10 @@
     bridge: "error.bridge",
     "bridge-port": "error.install",
     "bridge-token": "error.install",
+    changed: "configChanged",
+    busy: "configBusy",
+    "too-large": "configTooLarge",
+    "not-a-file": "configNotAFile",
   };
 
   // Docker states are not words users should have to learn.
@@ -209,6 +219,9 @@
       var tbar = null;
       if (isAdmin() && !standalone) {
         var items = [];
+        if (CONFIG_LABEL) {
+          items.push({ text: configLabel() + "…", handler: function () { self.openConfigFile(); } });
+        }
         if (SHOW_OUTPUT) {
           items.push({ text: label() + "…", handler: function () { self.openSettings(); } });
         }
@@ -588,6 +601,131 @@
       });
       this.phoneWindow.show();
       render();
+    },
+
+    /**
+     * The app's settings file (not "openConfig": DSM's AppWindow keeps its launch parameters
+     * there). Saving checks it in the app's container, then restarts the app;
+     * if the app does not come back with it, the bridge restores the previous file, and this
+     * window reopens with the administrator's text and what the app reported. `failed` carries
+     * that text and report.
+     */
+    openConfigFile: function (failed) {
+      var self = this;
+      if (this.isDestroyed) return;
+      this.getEl().mask(t("loading"));
+      api(BASE + "config.cgi").then(function (data) {
+        self.getEl().unmask();
+        self.showConfigFile(data, failed);
+      }).catch(function (error) {
+        self.getEl().unmask();
+        alertBox(configLabel(), escapeHtml(explain(error)));
+      });
+    },
+
+    showConfigFile: function (data, failed) {
+      var self = this;
+      if (this.configWindow && !this.configWindow.isDestroyed) this.configWindow.close();
+      var TextArea = ux("TextArea", Ext.form.TextArea);
+      var Button = ux("Button", Ext.Button);
+      var area = new TextArea({
+        value: failed ? failed.content : data.content,
+        flex: 1,
+        style: "font-family:Menlo,Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre",
+      });
+      var message = new Ext.BoxComponent({ height: 0, html: "" });
+      function show(text) {
+        message.update(text
+          ? "<div style=\"height:100%;box-sizing:border-box;overflow:auto;padding:6px 0;color:#d03030;"
+            + "font-family:Menlo,Consolas,monospace;font-size:12px;white-space:pre-wrap\">"
+            + escapeHtml(text) + "</div>"
+          : "");
+        message.setHeight(text ? 130 : 0);
+        win.doLayout();
+      }
+      var save = new Button({
+        text: t("configSave"),
+        btnStyle: "blue",
+        handler: function () {
+          var content = area.getValue();
+          win.getEl().mask(t("configChecking"));
+          api(BASE + "config.cgi", { method: "POST", body: { content: content, version: data.version } })
+            .then(function (result) {
+              win.getEl().unmask();
+              if (!result.ok) {
+                show(t("configRejected") + "\n\n" + result.problem);
+                return;
+              }
+              win.close();
+              self.notifyFrame("bridge:busy", { title: t("restarting"), message: t("configApplying") });
+              self.followConfigFile(content, result.notes);
+            })
+            .catch(function (error) {
+              win.getEl().unmask();
+              show(explain(error));
+            });
+        },
+      });
+      var win = this.configWindow = new SYNO.SDS.ModalWindow({
+        owner: this,
+        title: configLabel(),
+        width: 880,
+        height: 640,
+        layout: { type: "vbox", align: "stretch", padding: "12 16 4 16" },
+        items: [
+          new Ext.BoxComponent({
+            height: 44,
+            html: "<p style=\"margin:0;color:#3c4554\">"
+              + escapeHtml(t("configIntro", { file: data.file, share: PACKAGE_USER_NAME })) + "</p>",
+          }),
+          area,
+          message,
+        ],
+        buttons: [
+          { xtype: "syno_button", btnStyle: "grey", text: t("cancel"), handler: function () { win.close(); } },
+          save,
+        ],
+      });
+      win.show();
+      // Tab indents, as in any code editor, instead of leaving the field.
+      area.getEl().on("keydown", function (event) {
+        if (event.getKey() !== event.TAB || event.shiftKey) return;
+        event.stopEvent();
+        var field = area.getEl().dom;
+        var start = field.selectionStart;
+        field.value = field.value.slice(0, start) + "    " + field.value.slice(field.selectionEnd);
+        field.selectionStart = field.selectionEnd = start + 4;
+      });
+      if (failed) show(failed.problem);
+      area.focus();
+    },
+
+    /** Follows the restart that applies saved settings, and reports how it ended. */
+    followConfigFile: function (content, notes) {
+      var self = this;
+      var failures = 0;
+      (function poll() {
+        api(BASE + "config.cgi?status=1").then(function (job) {
+          if (job.state === "checking" || job.state === "restarting" || job.state === "restoring") {
+            if (job.state === "restoring") {
+              self.notifyFrame("bridge:busy", { title: t("restarting"), message: t("configRestoring") });
+            }
+            setTimeout(poll, 2000);
+            return;
+          }
+          self.notifyFrame("bridge:restarting");
+          self.whenReady();
+          if (job.state === "applied") {
+            if (notes) alertBox(configLabel(), escapeHtml(t("configNotes")) + "<pre style=\"white-space:pre-wrap\">" + escapeHtml(notes) + "</pre>");
+          } else {
+            var problem = t(job.state === "restored" ? "configRestored" : "configFailed");
+            self.openConfigFile({ content: content, problem: problem + (job.log ? "\n\n" + job.log : "") });
+          }
+        }).catch(function () {
+          if (++failures < 40) setTimeout(poll, 3000);
+          else self.notifyFrame("bridge:restarting");
+        });
+      })();
     },
 
     /** Opens Folder access only when a folder needs attention; silent otherwise. */

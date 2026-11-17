@@ -4,7 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createDocker } from "../src/docker.mjs";
+import { createDocker, demux } from "../src/docker.mjs";
 
 /** A fake Docker Engine on a unix socket: answers by "METHOD path" and records every request. */
 async function engine(routes) {
@@ -94,4 +94,21 @@ test("container names are path-encoded", async (t) => {
   t.after(fake.close);
   await fake.docker.start("a/b");
   assert.deepEqual(fake.seen, ["POST /containers/a%2Fb/start"]);
+});
+
+test("joins the frames of a container's output", () => {
+  const frame = (stream, text) => {
+    const payload = Buffer.from(text);
+    const header = Buffer.alloc(8);
+    header[0] = stream;
+    header.writeUInt32BE(payload.length, 4);
+    return Buffer.concat([header, payload]);
+  };
+  const buffer = Buffer.concat([frame(1, "out\n"), frame(2, "err ü\n"), frame(1, "done")]);
+  assert.equal(demux(buffer), "out\nerr ü\ndone");
+  assert.equal(
+    demux(Buffer.concat([frame(1, "ok"), Buffer.from([1, 0, 0])])),
+    "ok",
+    "a cut header is ignored",
+  );
 });

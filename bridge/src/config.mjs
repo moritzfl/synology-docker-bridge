@@ -22,6 +22,15 @@ export function shareRoot(link, readlink = fs.readlinkSync) {
   }
 }
 
+function list(value) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function loadConfig(env = process.env) {
   const tokenFile = env.BRIDGE_TOKEN_FILE || "/run/bridge/token";
   const token =
@@ -72,5 +81,11 @@ export function loadConfig(env = process.env) {
     appId: env.BRIDGE_APP_ID || "",
     dsmHttpPort: integer(env.BRIDGE_DSM_HTTP_PORT, 5000),
     dsmHttpsPort: integer(env.BRIDGE_DSM_HTTPS_PORT, 5001),
+    // The app's settings file in its data folder, which administrators edit in the window.
+    configFile: env.BRIDGE_CONFIG_FILE || "",
+    configCheck: list(env.BRIDGE_CONFIG_CHECK),
+    configReady: list(env.BRIDGE_CONFIG_READY),
+    configSettleSeconds: integer(env.BRIDGE_CONFIG_SETTLE_SECONDS, 30),
+    configTimeoutSeconds: integer(env.BRIDGE_CONFIG_TIMEOUT_SECONDS, 600),
   };
 }

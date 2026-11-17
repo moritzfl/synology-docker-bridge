@@ -124,6 +124,45 @@
       },
       "description": "For apps that only work at the root of an address: DSM's nginx serves the app on these ports of its own, with DSM's certificate, still behind the bridge's DSM sign-in. The desktop window and Login Portal open it there; the ports appear in DSM's firewall list."
     },
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Command the app container starts with instead of the image's own, e.g. a start script brought in with files that then runs the image's script."
+    },
+    "configFile": {
+      "description": "A settings file in the data folder that administrators edit in the window (Manage > Settings). Saving checks it, restarts the app, and restores the previous file if the app does not come back.",
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["path"],
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "The file, relative to the data folder, e.g. settings.yaml."
+            },
+            "check": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Command run in the app's container before saving; {file} is the new file's path there. A non-zero exit rejects the file and its output is shown; output of a successful check is shown as notes."
+            },
+            "ready": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Command run in the app's container after the restart that succeeds only once the app is really up, for apps that answer with a maintenance page while they set up. Default: any answer from the app."
+            },
+            "label": {
+              "description": "Name of the menu item and dialog; default Settings.",
+              "oneOf": [{ "$ref": "#/$defs/plainText" }, { "type": "object" }]
+            }
+          }
+        }
+      ]
+    },
     "files": {
       "type": "object",
       "propertyNames": { "pattern": "^/[A-Za-z0-9._/-]+$" },

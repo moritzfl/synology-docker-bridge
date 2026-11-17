@@ -80,6 +80,16 @@ function copyTree(source, target, values) {
 
 const APP_ICON_SIZES = [16, 24, 32, 48, 64, 72, 256];
 
+/** The window's shell scripts; DSM runs the CGIs as the package user. */
+const UI_SCRIPTS = [
+  "auth.sh",
+  "status.cgi",
+  "session.cgi",
+  "settings.cgi",
+  "access.cgi",
+  "config.cgi",
+];
+
 /** Width / height of an SVG from its viewBox, else its width and height; 1 when unknown. */
 export function svgAspect(text) {
   const root = /<svg\b[^>]*>/i.exec(text)?.[0] || "";
@@ -333,6 +343,53 @@ function parseFiles(value, appDir) {
   });
 }
 
+function stringList(value, what) {
+  if (
+    !Array.isArray(value) ||
+    !value.length ||
+    value.some((item) => typeof item !== "string" || !item)
+  ) {
+    throw new Error(`${what} must be a list of strings, e.g. ["/bin/sh", "/app/start.sh"]`);
+  }
+  return value;
+}
+
+/** A value inside a Compose file: JSON quoting, and `$` kept literal instead of substituted. */
+function composeValue(value) {
+  return JSON.stringify(value).replaceAll("$", "$$$$");
+}
+
+/**
+ * The settings file administrators edit in the window: a path in the data folder, a command that
+ * checks a candidate before it is applied ({file} is its path in the container), a command that
+ * succeeds once the app is really up after the restart, and a name.
+ */
+function parseConfigFile(value) {
+  if (value === undefined) return null;
+  const config = typeof value === "string" ? { path: value } : value;
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    throw new Error("configFile must be a path in the data folder or { path, check, label }");
+  }
+  const file = String(config.path || "");
+  if (
+    !/^[A-Za-z0-9_-][A-Za-z0-9._-]*(\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/.test(file) ||
+    file.split("/").some((part) => part === "..")
+  ) {
+    throw new Error("configFile path must be a file in the data folder, e.g. settings.yaml");
+  }
+  const check = config.check === undefined ? [] : stringList(config.check, "configFile check");
+  const ready = config.ready === undefined ? [] : stringList(config.ready, "configFile ready");
+  const label =
+    typeof config.label === "object" && config.label
+      ? { enu: "Settings", ...config.label }
+      : { enu: config.label || "Settings", ger: config.label ? undefined : "Einstellungen" };
+  for (const text of Object.values(label)) {
+    if (text !== undefined && /["\\<>\n]/.test(text))
+      throw new Error("configFile label must be plain text");
+  }
+  return { file, check, ready, label };
+}
+
 /** The app runs as the package's own DSM user, so DSM permissions decide what it may access. */
 export function packageUser(config) {
   return config.appUser === "package";
@@ -507,6 +564,8 @@ export function resolve(raw, configDir) {
   config.controlPort = Number(config.controlPort || controlPortFor(id));
   config.ui = config.ui || {};
   config.files = parseFiles(config.files, config.appDir);
+  const command = config.command === undefined ? null : stringList(config.command, "command");
+  const configFile = parseConfigFile(config.configFile);
   const webPorts = parseWebPorts(config.webPorts);
   if (
     webPorts &&
@@ -668,6 +727,11 @@ export function resolve(raw, configDir) {
     frameworkVersion: frameworkVersion(),
     appEnvironment,
     appOutputVolume: outputVolume(config.outputContainerRoot),
+    appCommand: command ? `    command: ${composeValue(command)}` : "",
+    configFile: configFile ? configFile.file : "",
+    configCheck: composeValue(JSON.stringify(configFile ? configFile.check : [])),
+    configReady: composeValue(JSON.stringify(configFile ? configFile.ready : [])),
+    configLabelJson: scriptJson(configFile ? configFile.label : null),
     appFileVolumes: config.files
       .map((file) => `      - /var/packages/${id}/target/files/${file.name}:${file.target}:ro`)
       .join("\n"),
@@ -697,7 +761,7 @@ function check(config, values, archInfo) {
     for (const script of fs.readdirSync(path.join(stage, "scripts"))) {
       execFileSync("sh", ["-n", path.join(stage, "scripts", script)]);
     }
-    for (const cgi of ["auth.sh", "status.cgi", "session.cgi", "settings.cgi", "access.cgi"]) {
+    for (const cgi of UI_SCRIPTS) {
       execFileSync("sh", ["-n", path.join(stage, "ui", cgi)]);
     }
     for (const file of config.files) {
@@ -860,7 +924,7 @@ function assemblePackage(config, values, archInfo, options, stage) {
   for (const script of fs.readdirSync(path.join(payload, "scripts"))) {
     fs.chmodSync(path.join(payload, "scripts", script), 0o755);
   }
-  for (const cgi of ["status.cgi", "settings.cgi", "session.cgi", "access.cgi", "auth.sh"]) {
+  for (const cgi of UI_SCRIPTS) {
     fs.chmodSync(path.join(payload, "ui", cgi), 0o755);
   }
 

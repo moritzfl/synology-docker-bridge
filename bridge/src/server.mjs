@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import httpProxy from "http-proxy";
 import { createAuthenticator } from "./auth.mjs";
+import { ConfigError, createConfigFile } from "./config-file.mjs";
 import { loadConfig } from "./config.mjs";
 import { dropDsmCookies, onlyCookies, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
 import { parseUser, probe } from "./access.mjs";
@@ -66,6 +67,22 @@ let outputDir = env[config.outputKey];
 // Shared with the app through its data folder; see identity.mjs.
 let identitySecret = "";
 let controlServer = null;
+
+const configFile =
+  config.configFile && config.dataDir
+    ? createConfigFile({
+        dir: config.dataDir,
+        file: config.configFile,
+        check: config.configCheck,
+        ready: config.configReady,
+        docker,
+        container: config.container,
+        reachable: appReachable,
+        log,
+        settleMs: config.configSettleSeconds * 1000,
+        timeoutMs: config.configTimeoutSeconds * 1000,
+      })
+    : null;
 
 const proxy = httpProxy.createProxyServer({
   target: `http://127.0.0.1:${config.internalPort}`,
@@ -243,12 +260,12 @@ function authorized(request) {
   return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
 }
 
-async function readJson(request) {
+async function readJson(request, limit = 64 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 64 * 1024) {
+    if (size > limit) {
       throw new HttpError(413, "request body too large");
     }
     chunks.push(chunk);
@@ -804,6 +821,27 @@ async function handleControl(request, response) {
   if (request.method === "POST" && url.pathname === "/output") {
     const body = await readJson(request);
     sendJson(response, 200, await ensureOutput(body.path, body.moveExisting !== false));
+    return;
+  }
+  if (url.pathname === "/config" || url.pathname === "/config/status") {
+    if (!configFile) {
+      sendJson(response, 404, { error: "no settings file" });
+      return;
+    }
+    try {
+      if (request.method === "GET" && url.pathname === "/config/status") {
+        sendJson(response, 200, configFile.status());
+      } else if (request.method === "GET") {
+        sendJson(response, 200, await configFile.read());
+      } else if (request.method === "POST") {
+        sendJson(response, 200, await configFile.save(await readJson(request, 1024 * 1024)));
+      } else {
+        sendJson(response, 405, { error: "method" });
+      }
+    } catch (error) {
+      if (!(error instanceof ConfigError)) throw error;
+      sendJson(response, error.status, { error: error.code });
+    }
     return;
   }
   if (request.method === "POST" && url.pathname === "/apply") {
