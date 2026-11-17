@@ -5,7 +5,7 @@
   "description": "Generic SPK generator and runtime for Docker web UIs as DSM desktop apps",
   "license": "MIT",
   "scripts": {
-    "test": "node --test bridge/test packaging/test",
+    "test": "node --test \"bridge/test/**/*.test.mjs\" \"packaging/test/**/*.test.mjs\"",
     "check": "node packaging/generate.mjs --check --config"
   },
   "engines": {
