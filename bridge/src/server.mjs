@@ -910,6 +910,12 @@ async function startControl(port) {
     });
   });
   server.on("upgrade", (request, socket, head) => {
+    // Node hands the socket over without its own error handler, and http-proxy adds one only
+    // once the app accepts the upgrade. A browser that gives up while the app is still starting
+    // resets the socket, which would otherwise end the bridge.
+    socket.on("error", (error) => {
+      log("debug", "websocket client error", { error: error.message });
+    });
     const url = new URL(request.url || "/", "http://localhost");
     if (url.pathname.startsWith("/__proxy/")) {
       request.url = url.pathname.slice("/__proxy".length) + url.search;
