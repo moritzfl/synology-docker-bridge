@@ -15,6 +15,7 @@ services:
     volumes:
       - ${APP_DATA_DIR:-{{dataDirDefault}}}:/data
 {{appOutputVolume}}
+{{appFileVolumes}}
 
   bridge:
     image: ${BRIDGE_IMAGE:-{{bridgeImage}}}

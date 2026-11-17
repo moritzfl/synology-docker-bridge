@@ -109,6 +109,12 @@
       "items": { "type": "string", "pattern": "^/[A-Za-z0-9._~/-]*$" },
       "description": "App paths that devices on the network may fetch without a DSM session, such as audio for speakers, served at /webman/3rdparty/<id>/public/ on DSM's ports. A trailing slash allows everything below it. The app learns the full address from APP_PUBLIC_URL."
     },
+    "files": {
+      "type": "object",
+      "propertyNames": { "pattern": "^/[A-Za-z0-9._/-]+$" },
+      "additionalProperties": { "type": "string" },
+      "description": "Files the package brings for an unmodified image, e.g. a settings file: container path to a file next to this config. Mounted read-only."
+    },
     "hostTimezone": {
       "type": "boolean",
       "default": true,

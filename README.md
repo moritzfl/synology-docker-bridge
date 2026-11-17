@@ -108,6 +108,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `displayNameGer`, `descriptionGer` | German name and Package Center description                                                                                                                                                                                                |
 | `allUsers`                         | `true`: every DSM user may open the app. Default `false`: administrators grant it                                                                                                                                                         |
 | `identityHeaders`                  | `true`: the app receives `Remote-User`, `Remote-Groups` and `Remote-Name` for the signed-in DSM user                                                                                                                                      |
+| `files`                            | Files the package brings for an unmodified image, mounted read-only: `{ "/data/settings.py": "settings.py" }`                                                                                                                             |
 | `authMode`                         | `token` (default) or `none` for apps with their own sign-in                                                                                                                                                                               |
 
 Derived when not given: `dsmAppName` (`my-app` → `MyApp`), `container` (`id`), `internalPort` and

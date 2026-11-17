@@ -116,6 +116,29 @@ test("identity headers are off unless asked for", () => {
   );
 });
 
+test("files the package brings are mounted read-only into the unmodified image", () => {
+  const { read } = render({
+    ...minimal,
+    files: { "/data/settings.py": "settings.py", "/app/auth.py": "lib/auth.py" },
+  });
+  const compose = read("compose.yml");
+  assert.match(
+    compose,
+    /- \/var\/packages\/my-app\/target\/files\/0-settings\.py:\/data\/settings\.py:ro/,
+  );
+  assert.match(compose, /- \/var\/packages\/my-app\/target\/files\/1-auth\.py:\/app\/auth\.py:ro/);
+  assert.doesNotMatch(render(minimal).read("compose.yml"), /target\/files/);
+  for (const bad of [
+    { "relative.py": "a" },
+    { "/dir/": "a" },
+    { "/a/../b": "a" },
+    { "/a": "" },
+    ["/a"],
+  ]) {
+    assert.throws(() => resolve({ ...minimal, files: bad }, here), /files/, JSON.stringify(bad));
+  }
+});
+
 test("a logo that is not square is centered on a square icon", () => {
   assert.equal(
     svgAspect('<svg width="41.8pt" height="50.6pt" viewBox="0 0 41.8 50.6">'),

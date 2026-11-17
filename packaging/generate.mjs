@@ -240,6 +240,35 @@ function publicLocation(id, controlPort) {
   ].join("\n");
 }
 
+/**
+ * Files the package brings for an unmodified image, such as a settings file, mounted read-only
+ * at the given container paths. Keys are container paths, values files next to the app config.
+ */
+function parseFiles(value, appDir) {
+  if (value === undefined) return [];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("files maps container paths to files next to the app config");
+  }
+  return Object.entries(value).map(([target, source], index) => {
+    if (
+      !/^\/[A-Za-z0-9._/-]+$/.test(target) ||
+      target.endsWith("/") ||
+      target.includes("//") ||
+      target.split("/").some((part) => part === "." || part === "..")
+    ) {
+      throw new Error(`files: ${target} must be an absolute file path in the container`);
+    }
+    if (typeof source !== "string" || !source) {
+      throw new Error(`files: ${target} needs a file next to the app config`);
+    }
+    return {
+      target,
+      source: path.resolve(appDir, source),
+      name: `${index}-${path.posix.basename(target)}`,
+    };
+  });
+}
+
 /** The app runs as the package's own DSM user, so DSM permissions decide what it may access. */
 export function packageUser(config) {
   return config.appUser === "package";
@@ -413,6 +442,7 @@ export function resolve(raw, configDir) {
   config.outputSubdir = config.outputSubdir || path.basename(config.defaultOutputDir);
   config.controlPort = Number(config.controlPort || controlPortFor(id));
   config.ui = config.ui || {};
+  config.files = parseFiles(config.files, config.appDir);
 
   // App paths that devices on the network fetch without a DSM session; see bridge/src/public.mjs.
   const publicPaths = config.publicPaths || [];
@@ -528,6 +558,9 @@ export function resolve(raw, configDir) {
     frameworkVersion: frameworkVersion(),
     appEnvironment,
     appOutputVolume: outputVolume(config.outputContainerRoot),
+    appFileVolumes: config.files
+      .map((file) => `      - /var/packages/${id}/target/files/${file.name}:${file.target}:ro`)
+      .join("\n"),
     bridgeOutputVolume: showOutput ? outputVolume(config.outputHostRoot) : "",
     outputShare: config.outputShare,
     outputShareResource,
@@ -556,6 +589,10 @@ function check(config, values, archInfo) {
     }
     for (const cgi of ["auth.sh", "status.cgi", "session.cgi", "settings.cgi", "access.cgi"]) {
       execFileSync("sh", ["-n", path.join(stage, "ui", cgi)]);
+    }
+    for (const file of config.files) {
+      if (!fs.statSync(file.source, { throwIfNoEntry: false })?.isFile())
+        throw new Error(`files: missing ${file.source}`);
     }
     if (config.icon) {
       if (!fs.existsSync(path.resolve(config.appDir, config.icon)))
@@ -645,6 +682,11 @@ function assemblePackage(config, values, archInfo, options, stage) {
 
   renderTemplates(values, payload);
   copyIcons(config, payload);
+  fs.mkdirSync(path.join(payload, "files"), { recursive: true });
+  for (const file of config.files) {
+    fs.copyFileSync(file.source, path.join(payload, "files", file.name));
+    fs.chmodSync(path.join(payload, "files", file.name), 0o644);
+  }
 
   fs.writeFileSync(
     path.join(payload, "INFO"),
@@ -716,7 +758,7 @@ function assemblePackage(config, values, archInfo, options, stage) {
 
   const packageTgz = path.join(pkg, "package.tgz");
   const tarEnv = { ...process.env, COPYFILE_DISABLE: "1" };
-  run("tar", ["-C", payload, "-czf", packageTgz, "image.tar", "docker", "ui", "config"], {
+  run("tar", ["-C", payload, "-czf", packageTgz, "image.tar", "docker", "ui", "config", "files"], {
     env: tarEnv,
   });
 
