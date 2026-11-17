@@ -6,9 +6,14 @@
   "license": "MIT",
   "scripts": {
     "test": "node --test \"bridge/test/**/*.test.mjs\" \"packaging/test/**/*.test.mjs\"",
-    "check": "node packaging/generate.mjs --check --config"
+    "check": "node packaging/generate.mjs --check --config",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "engines": {
     "node": ">=26"
+  },
+  "devDependencies": {
+    "prettier": "3.10.1"
   }
 }

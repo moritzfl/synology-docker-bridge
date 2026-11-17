@@ -311,6 +311,8 @@ component. Its control API binds `127.0.0.1` only and requires a bearer token fr
 
 ## Verification
 
+- `npm ci` installs the formatting tool. Run `npm run format` to apply Prettier and
+  `npm run format:check` to check formatting as CI does. DSM packaging templates are excluded.
 - `npm test`: bridge sessions, identity, cookies, Docker API mapping, image cleanup, path
   validation; the generator's rendering, shell syntax, JSON, switches, and text coverage.
 - `test/e2e/`: real installs and window tests on Virtual DSM 7.2.2 over HTTP and HTTPS, with only

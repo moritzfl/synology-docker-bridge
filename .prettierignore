@@ -1,0 +1,9 @@
+# DSM templates mix placeholder syntaxes and are validated after rendering.
+/packaging/templates/
+
+# Generated files and local test artifacts.
+package-lock.json
+/packaging/dist/
+/.playwright-cli/
+/test/e2e/.auth/
+/test/e2e/output/
