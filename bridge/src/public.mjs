@@ -21,8 +21,10 @@ export function publicTarget(url, allowed) {
   }
   const pathname = parsed.pathname;
   if (/%2f|%5c|%00/i.test(pathname)) return null;
-  const permitted = allowed.some((prefix) => prefix.endsWith("/")
-    ? pathname.startsWith(prefix) && pathname.length > prefix.length
-    : pathname === prefix);
+  const permitted = allowed.some((prefix) =>
+    prefix.endsWith("/")
+      ? pathname.startsWith(prefix) && pathname.length > prefix.length
+      : pathname === prefix,
+  );
   return permitted ? pathname + parsed.search : null;
 }

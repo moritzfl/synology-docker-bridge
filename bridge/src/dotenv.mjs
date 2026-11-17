@@ -15,9 +15,11 @@ export function parse(text) {
     }
     const key = trimmed.slice(0, equals).trim();
     let value = trimmed.slice(equals + 1).trim();
-    if (value.length >= 2
-        && ((value.startsWith('"') && value.endsWith('"'))
-          || (value.startsWith("'") && value.endsWith("'")))) {
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
       value = value.slice(1, -1);
     }
     values[key] = value;
@@ -26,9 +28,11 @@ export function parse(text) {
 }
 
 export function format(values) {
-  return Object.entries(values)
-    .map(([key, value]) => `${key}=${quote(value)}`)
-    .join("\n") + "\n";
+  return (
+    Object.entries(values)
+      .map(([key, value]) => `${key}=${quote(value)}`)
+      .join("\n") + "\n"
+  );
 }
 
 function quote(value) {

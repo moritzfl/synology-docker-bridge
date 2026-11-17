@@ -11,21 +11,30 @@ const repo = path.dirname(here);
 const templateDir = path.join(here, "templates");
 
 function usage() {
-  console.error("usage: generate.mjs --config app.json [--arch x86_64|armv8] [--check]"
-    + " [--skip-app-build] [--skip-bridge-build] [--output dist]");
+  console.error(
+    "usage: generate.mjs --config app.json [--arch x86_64|armv8] [--check]" +
+      " [--skip-app-build] [--skip-bridge-build] [--output dist]",
+  );
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const options = { config: "", arch: "", check: false, skipAppBuild: false, skipBridgeBuild: false, output: "" };
+  const options = {
+    config: "",
+    arch: "",
+    check: false,
+    skipAppBuild: false,
+    skipBridgeBuild: false,
+    output: "",
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--config") options.config = argv[++i] || "";
     else if (arg === "--arch") {
       options.arch = argv[++i];
-      if (!options.arch || options.arch.startsWith("--")) throw new Error("--arch requires an architecture");
-    }
-    else if (arg === "--check") options.check = true;
+      if (!options.arch || options.arch.startsWith("--"))
+        throw new Error("--arch requires an architecture");
+    } else if (arg === "--check") options.check = true;
     else if (arg === "--skip-app-build") options.skipAppBuild = true;
     else if (arg === "--skip-bridge-build") options.skipBridgeBuild = true;
     else if (arg === "--output") options.output = argv[++i] || "";
@@ -81,12 +90,13 @@ function copyIcons(config, target) {
   if (config.icon) {
     const svg = path.resolve(config.appDir, config.icon);
     if (!fs.existsSync(svg)) throw new Error(`missing icon: ${svg}`);
-    const draw = (size, file) => execFileSync("rsvg-convert",
-      ["-w", String(size), "-h", String(size), "-o", file, svg]);
+    const draw = (size, file) =>
+      execFileSync("rsvg-convert", ["-w", String(size), "-h", String(size), "-o", file, svg]);
     try {
       for (const size of APP_ICON_SIZES) draw(size, path.join(images, `app_${size}.png`));
     } catch (error) {
-      if (error.code === "ENOENT") throw new Error("icon needs rsvg-convert (brew install librsvg)");
+      if (error.code === "ENOENT")
+        throw new Error("icon needs rsvg-convert (brew install librsvg)");
       throw error;
     }
     draw(72, path.join(target, "PACKAGE_ICON.PNG"));
@@ -113,16 +123,24 @@ function copyIcons(config, target) {
 
 /** "airplay-capture" -> "AirplayCapture", the DSM class name part. */
 export function dsmNameFor(id) {
-  return String(id).split(/[^A-Za-z0-9]+/).filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1)).join("");
+  return String(id)
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join("");
 }
 
 /** Bridge version plus the framework commit, so a package on a NAS can be traced back. */
 function frameworkVersion() {
-  const version = JSON.parse(fs.readFileSync(path.join(repo, "bridge", "package.json"), "utf8")).version;
+  const version = JSON.parse(
+    fs.readFileSync(path.join(repo, "bridge", "package.json"), "utf8"),
+  ).version;
   try {
-    const commit = execFileSync("git", ["-C", repo, "describe", "--always", "--dirty", "--abbrev=7"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const commit = execFileSync(
+      "git",
+      ["-C", repo, "describe", "--always", "--dirty", "--abbrev=7"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
     return `${version}+${commit}`;
   } catch {
     return version;
@@ -158,8 +176,11 @@ function internalPortFor(id) {
 
 /** The user an image runs as under plain docker run; root when the image declares none. */
 function imageUser(image, platform) {
-  const user = execFileSync("docker", ["image", "inspect", "--platform", platform,
-    "--format", "{{.Config.User}}", image], { encoding: "utf8" }).trim();
+  const user = execFileSync(
+    "docker",
+    ["image", "inspect", "--platform", platform, "--format", "{{.Config.User}}", image],
+    { encoding: "utf8" },
+  ).trim();
   return user || "0:0";
 }
 
@@ -202,8 +223,10 @@ function verifyPlatform(imageTar, platform, stage) {
     const image = JSON.parse(fs.readFileSync(path.join(dir, entry.Config), "utf8"));
     const tags = (entry.RepoTags || []).join(", ") || entry.Config;
     if (image.os !== os_ || image.architecture !== architecture) {
-      throw new Error(`${tags} is ${image.os}/${image.architecture}, not ${platform}; `
-        + `pull or build it with --platform ${platform}`);
+      throw new Error(
+        `${tags} is ${image.os}/${image.architecture}, not ${platform}; ` +
+          `pull or build it with --platform ${platform}`,
+      );
     }
     console.log(`==> ${tags}: ${image.os}/${image.architecture}`);
   }
@@ -218,8 +241,16 @@ function run(command, args, options = {}) {
 function buildBridge(config, platform, skip) {
   if (skip) return;
   run("docker", [
-    "buildx", "build", "--platform", platform, "--provenance=false", "--sbom=false",
-    "--load", "-t", config.bridgeImage, path.join(repo, "bridge"),
+    "buildx",
+    "build",
+    "--platform",
+    platform,
+    "--provenance=false",
+    "--sbom=false",
+    "--load",
+    "-t",
+    config.bridgeImage,
+    path.join(repo, "bridge"),
   ]);
 }
 
@@ -261,15 +292,19 @@ export function resolve(raw, configDir) {
   const displayName = required(config, "displayName");
   const description = required(config, "description");
   const maintainer = required(config, "maintainer");
-  for (const [key, value] of [["displayName", displayName], ["description", description],
-    ["maintainer", maintainer]]) {
+  for (const [key, value] of [
+    ["displayName", displayName],
+    ["description", description],
+    ["maintainer", maintainer],
+  ]) {
     // These end up inside JS strings, HTML and INFO; keep them plain text.
     if (/["\\<>\n]/.test(String(value))) {
       throw new Error(`${key} must not contain quotes, backslashes, angle brackets or newlines`);
     }
   }
   const dsmAppName = config.dsmAppName || dsmNameFor(id);
-  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(dsmAppName)) throw new Error("dsmAppName must be letters and digits");
+  if (!/^[A-Za-z][A-Za-z0-9]*$/.test(dsmAppName))
+    throw new Error("dsmAppName must be letters and digits");
   const archInfo = platformFor(config.arch || "x86_64");
   const networkMode = config.networkMode || "bridge";
   if (networkMode !== "host" && networkMode !== "bridge") {
@@ -285,15 +320,23 @@ export function resolve(raw, configDir) {
   }
   const showOutput = config.output !== false;
   // A plain string, or one per DSM language: { "enu": "Recordings folder", "ger": "Aufnahmeordner" }.
-  const outputLabel = typeof config.outputLabel === "object" && config.outputLabel
-    ? { enu: "Output folder", ...config.outputLabel }
-    : { enu: config.outputLabel || "Output folder", ger: config.outputLabel ? undefined : "Ausgabeordner" };
+  const outputLabel =
+    typeof config.outputLabel === "object" && config.outputLabel
+      ? { enu: "Output folder", ...config.outputLabel }
+      : {
+          enu: config.outputLabel || "Output folder",
+          ger: config.outputLabel ? undefined : "Ausgabeordner",
+        };
   for (const value of Object.values(outputLabel)) {
-    if (value !== undefined && /["\\<>\n]/.test(value)) throw new Error("outputLabel must be plain text");
+    if (value !== undefined && /["\\<>\n]/.test(value))
+      throw new Error("outputLabel must be plain text");
   }
   const displayNameGer = config.displayNameGer || displayName;
   const descriptionGer = config.descriptionGer || description;
-  for (const [key, value] of [["displayNameGer", displayNameGer], ["descriptionGer", descriptionGer]]) {
+  for (const [key, value] of [
+    ["displayNameGer", displayNameGer],
+    ["descriptionGer", descriptionGer],
+  ]) {
     if (/["\\<>\n]/.test(String(value))) {
       throw new Error(`${key} must not contain quotes, backslashes, angle brackets or newlines`);
     }
@@ -301,7 +344,9 @@ export function resolve(raw, configDir) {
   config.container = config.container || id;
   config.service = config.service || "app";
   config.internalPort = Number(config.internalPort || internalPortFor(id));
-  config.containerPort = Number(config.containerPort || (networkMode === "host" ? config.internalPort : 8080));
+  config.containerPort = Number(
+    config.containerPort || (networkMode === "host" ? config.internalPort : 8080),
+  );
   if (networkMode === "host" && config.internalPort !== config.containerPort) {
     throw new Error("host networking requires internalPort == containerPort");
   }
@@ -316,13 +361,18 @@ export function resolve(raw, configDir) {
   // The folder lives in a shared folder that DSM creates when it is missing (like Synology's own
   // media apps do with "music"), so packages never make plain directories nobody can see.
   // outputParent/defaultOutputDir are the older way to say the same.
-  config.outputShare = config.outputShare
-    || (config.outputParent ? path.posix.basename(config.outputParent) : "music");
-  if (!/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/.test(config.outputShare)) throw new Error("outputShare must be a share name");
-  if (config.outputShare === id) throw new Error("outputShare must differ from id, the package's own share");
+  config.outputShare =
+    config.outputShare ||
+    (config.outputParent ? path.posix.basename(config.outputParent) : "music");
+  if (!/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/.test(config.outputShare))
+    throw new Error("outputShare must be a share name");
+  if (config.outputShare === id)
+    throw new Error("outputShare must differ from id, the package's own share");
   config.outputParent = `/volume1/${config.outputShare}`;
-  config.defaultOutputDir = `${config.outputParent}/${config.outputSubdir
-    || (config.defaultOutputDir ? path.posix.basename(config.defaultOutputDir) : id)}`;
+  config.defaultOutputDir = `${config.outputParent}/${
+    config.outputSubdir ||
+    (config.defaultOutputDir ? path.posix.basename(config.defaultOutputDir) : id)
+  }`;
   config.outputContainerRoot = config.outputContainerRoot || "/output-parent";
   // Named per package: apps whose folders share a parent must not repoint each other's link.
   config.outputLink = config.outputLink || `.${id}-folder`;
@@ -333,10 +383,20 @@ export function resolve(raw, configDir) {
 
   // App paths that devices on the network fetch without a DSM session; see bridge/src/public.mjs.
   const publicPaths = config.publicPaths || [];
-  if (!Array.isArray(publicPaths) || publicPaths.some((item) => typeof item !== "string"
-      || !/^\/[A-Za-z0-9._~\/-]*$/.test(item) || item === "/" || item.includes("//")
-      || item.split("/").some((part) => part === "." || part === ".."))) {
-    throw new Error("publicPaths must be app paths such as /media/ (a trailing slash allows everything below)");
+  if (
+    !Array.isArray(publicPaths) ||
+    publicPaths.some(
+      (item) =>
+        typeof item !== "string" ||
+        !/^\/[A-Za-z0-9._~\/-]*$/.test(item) ||
+        item === "/" ||
+        item.includes("//") ||
+        item.split("/").some((part) => part === "." || part === ".."),
+    )
+  ) {
+    throw new Error(
+      "publicPaths must be app paths such as /media/ (a trailing slash allows everything below)",
+    );
   }
   const publicPrefix = `/webman/3rdparty/${id}/public`;
 
@@ -347,7 +407,9 @@ export function resolve(raw, configDir) {
   const defaultContainerOutput = `${config.outputContainerRoot}/${config.outputLink}`;
   const appEnv = {
     APP_PORT: `\${APP_CONTAINER_PORT:-${config.containerPort}}`,
-    ...(showOutput ? { APP_OUTPUT_DIR: `\${APP_OUTPUT_CONTAINER_DIR:-${defaultContainerOutput}}` } : {}),
+    ...(showOutput
+      ? { APP_OUTPUT_DIR: `\${APP_OUTPUT_CONTAINER_DIR:-${defaultContainerOutput}}` }
+      : {}),
     APP_DATA_DIR: "/data",
     // Where devices on the network reach the public paths: the NAS address on DSM's HTTP port.
     ...(publicPaths.length ? { APP_PUBLIC_URL: "${APP_PUBLIC_URL:-}" } : {}),
@@ -360,21 +422,27 @@ export function resolve(raw, configDir) {
       .replaceAll("${APP_CONTAINER_PORT}", `\${APP_CONTAINER_PORT:-${config.containerPort}}`)
       .replaceAll("${APP_PUBLIC_URL}", "${APP_PUBLIC_URL:-}")
       .replaceAll("${APP_INTERNAL_PORT}", `\${APP_INTERNAL_PORT:-${config.internalPort}}`)
-      .replaceAll("${APP_OUTPUT_CONTAINER_DIR}", `\${APP_OUTPUT_CONTAINER_DIR:-${defaultContainerOutput}}`);
+      .replaceAll(
+        "${APP_OUTPUT_CONTAINER_DIR}",
+        `\${APP_OUTPUT_CONTAINER_DIR:-${defaultContainerOutput}}`,
+      );
   }
   const appEnvironment = Object.entries(appEnv)
     .map(([key, value]) => `      ${key}: ${JSON.stringify(String(value))}`)
     .join("\n");
   const network = networkMode === "host" ? "    network_mode: host" : "";
-  const ports = networkMode === "host" ? "" : [
-    "    ports:",
-    `      - "127.0.0.1:\${APP_INTERNAL_PORT:-${config.internalPort}}:\${APP_CONTAINER_PORT:-${config.containerPort}}"`,
-  ].join("\n");
+  const ports =
+    networkMode === "host"
+      ? ""
+      : [
+          "    ports:",
+          `      - "127.0.0.1:\${APP_INTERNAL_PORT:-${config.internalPort}}:\${APP_CONTAINER_PORT:-${config.containerPort}}"`,
+        ].join("\n");
 
   // Apps without an output folder get no share mounted at all, and neither does their bridge.
   // Through DSM's per-package link, so the share is found on whichever volume it lives.
   const shareLink = `/var/packages/${id}/shares/${config.outputShare}`;
-  const outputVolume = (target) => showOutput ? `      - ${shareLink}:${target}` : "";
+  const outputVolume = (target) => (showOutput ? `      - ${shareLink}:${target}` : "");
   const outputShareResource = showOutput
     ? `,\n      {\n        "name": ${JSON.stringify(config.outputShare)},\n        "permission": {},\n        "once": true\n      }`
     : "";
@@ -457,7 +525,8 @@ function check(config, values, archInfo) {
       execFileSync("sh", ["-n", path.join(stage, "ui", cgi)]);
     }
     if (config.icon) {
-      if (!fs.existsSync(path.resolve(config.appDir, config.icon))) throw new Error(`missing icon: ${config.icon}`);
+      if (!fs.existsSync(path.resolve(config.appDir, config.icon)))
+        throw new Error(`missing icon: ${config.icon}`);
     } else {
       copyIcons(config, path.join(stage, "icons-check"));
     }
@@ -465,9 +534,21 @@ function check(config, values, archInfo) {
     fs.rmSync(stage, { recursive: true, force: true });
   }
   console.log(`${values.id} ${values.version} (${archInfo.arch}) is valid`);
-  for (const key of ["displayName", "dsmAppName", "image", "container", "hostPort", "containerPort",
-    "dataDirDefault", "outputParent", "defaultOutputDir", "allUsers", "authMode", "identityHeaders",
-    "frameworkVersion"]) {
+  for (const key of [
+    "displayName",
+    "dsmAppName",
+    "image",
+    "container",
+    "hostPort",
+    "containerPort",
+    "dataDirDefault",
+    "outputParent",
+    "defaultOutputDir",
+    "allUsers",
+    "authMode",
+    "identityHeaders",
+    "frameworkVersion",
+  ]) {
     console.log(`  ${key.padEnd(16)} ${values[key]}`);
   }
 }
@@ -495,7 +576,9 @@ function main() {
     values.appUser = "";
     console.log(`==> app runs as the package user ${id}`);
   } else {
-    const user = config.appUser ? String(config.appUser) : imageUser(config.image, archInfo.platform);
+    const user = config.appUser
+      ? String(config.appUser)
+      : imageUser(config.image, archInfo.platform);
     values.appUser = `    user: ${JSON.stringify(user)}`;
     console.log(`==> app runs as ${user}`);
   }
@@ -532,38 +615,52 @@ function assemblePackage(config, values, archInfo, options, stage) {
 
   fs.writeFileSync(
     path.join(payload, "INFO"),
-    render(fs.readFileSync(path.join(payload, "INFO"), "utf8"), values)
-      .replace("__ARCH__", archInfo.arch),
+    render(fs.readFileSync(path.join(payload, "INFO"), "utf8"), values).replace(
+      "__ARCH__",
+      archInfo.arch,
+    ),
   );
   fs.chmodSync(path.join(payload, "INFO"), 0o644);
 
   // DSM's app-portal worker looks the registration up by the package name.
   for (const extension of ["json", "mustache"]) {
-    fs.renameSync(path.join(payload, "config", `portal.${extension}`),
-      path.join(payload, "config", `${id}.${extension}`));
+    fs.renameSync(
+      path.join(payload, "config", `portal.${extension}`),
+      path.join(payload, "config", `${id}.${extension}`),
+    );
   }
   fs.copyFileSync(path.join(payload, "compose.yml"), path.join(payload, "docker", "compose.yml"));
   fs.rmSync(path.join(payload, "compose.yml"));
-  fs.writeFileSync(path.join(payload, "docker", ".env"), [
-    `APP_IMAGE=${config.image}`,
-    `BRIDGE_IMAGE=${config.bridgeImage}`,
-    `APP_CONTAINER=${config.container}`,
-    `APP_DATA_DIR=${values.dataDirDefault}`,
-    `APP_INTERNAL_PORT=${config.internalPort}`,
-    `APP_CONTAINER_PORT=${config.containerPort}`,
-    `BRIDGE_CONTROL_PORT=${config.controlPort}`,
-    `APP_OUTPUT_PARENT=${config.outputParent}`,
-    `APP_OUTPUT_DIR=${config.defaultOutputDir}`,
-    `APP_OUTPUT_CONTAINER_DIR=${config.outputContainerRoot}/${config.outputLink}`,
-    "",
-  ].join("\n"));
+  fs.writeFileSync(
+    path.join(payload, "docker", ".env"),
+    [
+      `APP_IMAGE=${config.image}`,
+      `BRIDGE_IMAGE=${config.bridgeImage}`,
+      `APP_CONTAINER=${config.container}`,
+      `APP_DATA_DIR=${values.dataDirDefault}`,
+      `APP_INTERNAL_PORT=${config.internalPort}`,
+      `APP_CONTAINER_PORT=${config.containerPort}`,
+      `BRIDGE_CONTROL_PORT=${config.controlPort}`,
+      `APP_OUTPUT_PARENT=${config.outputParent}`,
+      `APP_OUTPUT_DIR=${config.defaultOutputDir}`,
+      `APP_OUTPUT_CONTAINER_DIR=${config.outputContainerRoot}/${config.outputLink}`,
+      "",
+    ].join("\n"),
+  );
 
   console.log("==> saving images");
   const imageTar = path.join(payload, "image.tar");
   // With the containerd image store, docker save exports the build machine's platform unless
   // told otherwise; an arm64 image in an x86_64 package never starts on the NAS.
-  run("docker", ["save", "--platform", archInfo.platform, config.image, config.bridgeImage,
-    "-o", imageTar]);
+  run("docker", [
+    "save",
+    "--platform",
+    archInfo.platform,
+    config.image,
+    config.bridgeImage,
+    "-o",
+    imageTar,
+  ]);
   verifyPlatform(imageTar, archInfo.platform, stage);
 
   for (const script of fs.readdirSync(path.join(payload, "scripts"))) {
@@ -579,20 +676,38 @@ function assemblePackage(config, values, archInfo, options, stage) {
   fs.cpSync(path.join(payload, "conf"), path.join(pkg, "conf"), { recursive: true });
   fs.copyFileSync(path.join(payload, "INFO"), path.join(pkg, "INFO"));
   fs.copyFileSync(path.join(payload, "PACKAGE_ICON.PNG"), path.join(pkg, "PACKAGE_ICON.PNG"));
-  fs.copyFileSync(path.join(payload, "PACKAGE_ICON_256.PNG"), path.join(pkg, "PACKAGE_ICON_256.PNG"));
+  fs.copyFileSync(
+    path.join(payload, "PACKAGE_ICON_256.PNG"),
+    path.join(pkg, "PACKAGE_ICON_256.PNG"),
+  );
 
   const packageTgz = path.join(pkg, "package.tgz");
   const tarEnv = { ...process.env, COPYFILE_DISABLE: "1" };
-  run("tar", ["-C", payload, "-czf", packageTgz, "image.tar", "docker", "ui", "config"], { env: tarEnv });
+  run("tar", ["-C", payload, "-czf", packageTgz, "image.tar", "docker", "ui", "config"], {
+    env: tarEnv,
+  });
 
   const outputDir = path.resolve(options.output || path.join(here, "dist"));
   fs.mkdirSync(outputDir, { recursive: true });
   const output = path.join(outputDir, `${id}-${version}-${archInfo.arch}.spk`);
-  publishPackage(output, (staged) => run("tar", [
-    "-C", pkg, "-cf", staged,
-    "INFO", "package.tgz", "PACKAGE_ICON.PNG", "PACKAGE_ICON_256.PNG",
-    "scripts", "conf",
-  ], { env: tarEnv }));
+  publishPackage(output, (staged) =>
+    run(
+      "tar",
+      [
+        "-C",
+        pkg,
+        "-cf",
+        staged,
+        "INFO",
+        "package.tgz",
+        "PACKAGE_ICON.PNG",
+        "PACKAGE_ICON_256.PNG",
+        "scripts",
+        "conf",
+      ],
+      { env: tarEnv },
+    ),
+  );
 
   console.log(`wrote ${output} (${(fs.statSync(output).size / 1024 / 1024).toFixed(1)} MB)`);
   const checksum = execFileSync("shasum", ["-a", "256", output], { encoding: "utf8" }).trim();

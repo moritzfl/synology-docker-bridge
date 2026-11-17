@@ -3,24 +3,13 @@
   "title": "Synology Docker Bridge app config",
   "description": "Input for packaging/generate.mjs. Only id, version, displayName, description, maintainer, image and an icon are required; everything else has a default.",
   "type": "object",
-  "required": [
-    "id",
-    "version",
-    "displayName",
-    "description",
-    "maintainer",
-    "image"
-  ],
+  "required": ["id", "version", "displayName", "description", "maintainer", "image"],
   "anyOf": [
     {
-      "required": [
-        "icon"
-      ]
+      "required": ["icon"]
     },
     {
-      "required": [
-        "icons"
-      ]
+      "required": ["icons"]
     }
   ],
   "properties": {
@@ -59,12 +48,7 @@
       "description": "DSM class name part; derived from id (my-app -> MyApp)."
     },
     "arch": {
-      "enum": [
-        "x86_64",
-        "amd64",
-        "armv8",
-        "arm64"
-      ],
+      "enum": ["x86_64", "amd64", "armv8", "arm64"],
       "default": "x86_64"
     },
     "appDir": {
@@ -108,10 +92,7 @@
       "description": "Localhost port the bridge proxies to; derived from id."
     },
     "networkMode": {
-      "enum": [
-        "bridge",
-        "host"
-      ],
+      "enum": ["bridge", "host"],
       "default": "bridge"
     },
     "appPath": {
@@ -141,11 +122,7 @@
     "appEnv": {
       "type": "object",
       "additionalProperties": {
-        "type": [
-          "string",
-          "number",
-          "boolean"
-        ]
+        "type": ["string", "number", "boolean"]
       }
     },
     "dataDir": {
@@ -195,10 +172,7 @@
       "description": "true: every DSM user may open the app without an Application Privileges entry."
     },
     "authMode": {
-      "enum": [
-        "token",
-        "none"
-      ],
+      "enum": ["token", "none"],
       "default": "token"
     },
     "identityHeaders": {

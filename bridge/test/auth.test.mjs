@@ -22,18 +22,24 @@ test("one-time token becomes a session cookie", () => {
   const token = auth.mint("admin");
   const session = auth.login(token);
   assert.ok(session);
-  assert.equal(auth.authenticate({
-    headers: { cookie: `dsm_bridge_session=${session}` },
-  }).user, "admin");
+  assert.equal(
+    auth.authenticate({
+      headers: { cookie: `dsm_bridge_session=${session}` },
+    }).user,
+    "admin",
+  );
   assert.equal(auth.login(token), null, "one-time token must not be reusable");
 });
 
 test("invalid and missing sessions are rejected", () => {
   const auth = createAuthenticator(config());
   assert.equal(auth.authenticate({ headers: {} }), null);
-  assert.equal(auth.authenticate({
-    headers: { cookie: "dsm_bridge_session=invalid" },
-  }), null);
+  assert.equal(
+    auth.authenticate({
+      headers: { cookie: "dsm_bridge_session=invalid" },
+    }),
+    null,
+  );
 });
 
 test("strips only the bridge session cookie", () => {
@@ -61,19 +67,25 @@ test("sessions slide on use and expire only after idling", (t) => {
 test("cookie is scoped to the package proxy path", () => {
   const auth = createAuthenticator(config());
   assert.match(auth.cookie("abc"), /; Path=\/;/);
-  assert.match(auth.cookie("abc", false, "/webman/3rdparty/app/proxy/"),
-    /; Path=\/webman\/3rdparty\/app\/proxy\/;/);
+  assert.match(
+    auth.cookie("abc", false, "/webman/3rdparty/app/proxy/"),
+    /; Path=\/webman\/3rdparty\/app\/proxy\/;/,
+  );
 });
 
 test("a stale cookie of another package does not hide this package's session", () => {
   const auth = createAuthenticator(config());
   const session = auth.login(auth.mint("admin"));
-  assert.ok(auth.authenticate({
-    headers: { cookie: `dsm_bridge_session=${session}; dsm_bridge_session=stale` },
-  }));
-  assert.ok(auth.authenticate({
-    headers: { cookie: `dsm_bridge_session=stale; dsm_bridge_session=${session}` },
-  }));
+  assert.ok(
+    auth.authenticate({
+      headers: { cookie: `dsm_bridge_session=${session}; dsm_bridge_session=stale` },
+    }),
+  );
+  assert.ok(
+    auth.authenticate({
+      headers: { cookie: `dsm_bridge_session=stale; dsm_bridge_session=${session}` },
+    }),
+  );
 });
 
 test("cookie is a browser-session cookie and secure over HTTPS", () => {
@@ -97,7 +109,11 @@ test("a session needs a fresh privilege check within verifySeconds", (t) => {
   const session = auth.login(auth.mint("anna"));
   const request = { headers: { cookie: `dsm_bridge_session=${session}` } };
   t.mock.timers.tick(500_000);
-  assert.equal(auth.refresh(request, auth.mint("bob")), false, "another user's token renews nothing");
+  assert.equal(
+    auth.refresh(request, auth.mint("bob")),
+    false,
+    "another user's token renews nothing",
+  );
   assert.equal(auth.refresh(request, "made-up"), false);
   assert.equal(auth.refresh(request, auth.mint("anna")), true);
   t.mock.timers.tick(500_000);

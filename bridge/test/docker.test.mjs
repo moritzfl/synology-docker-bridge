@@ -28,11 +28,16 @@ async function engine(routes) {
 
 test("inspect maps the fields the bridge uses and treats 404 as missing", async (t) => {
   const fake = await engine({
-    "GET /containers/my-app/json": [200, {
-      Id: "c1", Name: "/my-app", Image: "sha256:img",
-      Config: { Image: "my-app:spk", Labels: { a: "b" }, Env: ["X=1"] },
-      State: { Status: "running", Health: { Status: "healthy" } },
-    }],
+    "GET /containers/my-app/json": [
+      200,
+      {
+        Id: "c1",
+        Name: "/my-app",
+        Image: "sha256:img",
+        Config: { Image: "my-app:spk", Labels: { a: "b" }, Env: ["X=1"] },
+        State: { Status: "running", Health: { Status: "healthy" } },
+      },
+    ],
   });
   t.after(fake.close);
   const container = await fake.docker.inspect("my-app");
@@ -78,7 +83,10 @@ test("image removal is never forced and reports images still in use", async (t) 
   t.after(fake.close);
   assert.equal(await fake.docker.removeImage("sha256:old"), true);
   assert.equal(await fake.docker.removeImage("sha256:used"), false);
-  assert.ok(fake.seen.every((request) => !request.includes("force")), "never force");
+  assert.ok(
+    fake.seen.every((request) => !request.includes("force")),
+    "never force",
+  );
 });
 
 test("container names are path-encoded", async (t) => {

@@ -42,8 +42,11 @@ export async function probe(dir, user, run = execFileAsync) {
     return { exists: false, read: false, write: false };
   }
   try {
-    const { stdout } = await run(process.execPath, ["-e", PROBE, dir],
-      { uid: user.uid, gid: user.gid, timeout: 15_000 });
+    const { stdout } = await run(process.execPath, ["-e", PROBE, dir], {
+      uid: user.uid,
+      gid: user.gid,
+      timeout: 15_000,
+    });
     const result = JSON.parse(stdout);
     return { exists: true, read: result.read === true, write: result.write === true };
   } catch {

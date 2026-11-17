@@ -106,7 +106,8 @@ const PAGE_TEXTS = {
     notAnswering: "The app is not answering yet. This page reloads by itself.",
     signInTitle: "Sign in required",
     signIn: "Sign in to open {app}",
-    signInBody: "Open {app} from the DSM desktop. Its icon signs this window in with your DSM account.",
+    signInBody:
+      "Open {app} from the DSM desktop. Its icon signs this window in with your DSM account.",
     openDsm: "Open DSM",
   },
   de: {
@@ -114,7 +115,8 @@ const PAGE_TEXTS = {
     notAnswering: "Die App antwortet noch nicht. Diese Seite lädt sich selbst neu.",
     signInTitle: "Anmeldung erforderlich",
     signIn: "Melden Sie sich an, um {app} zu öffnen",
-    signInBody: "Öffnen Sie {app} über den DSM-Desktop. Das Symbol meldet dieses Fenster mit Ihrem DSM-Konto an.",
+    signInBody:
+      "Öffnen Sie {app} über den DSM-Desktop. Das Symbol meldet dieses Fenster mit Ihrem DSM-Konto an.",
     openDsm: "DSM öffnen",
   },
 };
@@ -131,15 +133,18 @@ proxy.on("error", (error, request, response) => {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     });
-    response.end(page({
-      title: pageText(request, "starting"),
-      heading: pageText(request, "starting"),
-      body: `<p>${escapeHtml(pageText(request, "notAnswering"))}</p>`,
-      // Inside the DSM window the wrapper shows the real state (starting, stopped, ...) and
-      // reloads the app when it answers; standalone tabs simply retry.
-      script: "if (window.parent !== window) { parent.postMessage({ type: 'bridge:unavailable' },"
-        + " location.origin); } else { setTimeout(function () { location.reload(); }, 3000); }",
-    }));
+    response.end(
+      page({
+        title: pageText(request, "starting"),
+        heading: pageText(request, "starting"),
+        body: `<p>${escapeHtml(pageText(request, "notAnswering"))}</p>`,
+        // Inside the DSM window the wrapper shows the real state (starting, stopped, ...) and
+        // reloads the app when it answers; standalone tabs simply retry.
+        script:
+          "if (window.parent !== window) { parent.postMessage({ type: 'bridge:unavailable' }," +
+          " location.origin); } else { setTimeout(function () { location.reload(); }, 3000); }",
+      }),
+    );
   } else if (response && response.destroy) {
     response.destroy();
   }
@@ -175,12 +180,14 @@ class HttpError extends Error {
 }
 
 function log(level, message, extra = {}) {
-  console.log(JSON.stringify({
-    time: new Date().toISOString(),
-    level,
-    message,
-    ...extra,
-  }));
+  console.log(
+    JSON.stringify({
+      time: new Date().toISOString(),
+      level,
+      message,
+      ...extra,
+    }),
+  );
 }
 
 function sendJson(response, status, body) {
@@ -227,16 +234,19 @@ async function readJson(request) {
 
 function appReachable() {
   return new Promise((resolve) => {
-    const request = http.get({
-      host: "127.0.0.1",
-      port: config.internalPort,
-      path: config.appPath,
-      timeout: 1500,
-      headers: { "User-Agent": "dsm-docker-bridge/1" },
-    }, (response) => {
-      response.resume();
-      resolve(response.statusCode < 500);
-    });
+    const request = http.get(
+      {
+        host: "127.0.0.1",
+        port: config.internalPort,
+        path: config.appPath,
+        timeout: 1500,
+        headers: { "User-Agent": "dsm-docker-bridge/1" },
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode < 500);
+      },
+    );
     request.on("timeout", () => {
       request.destroy();
       resolve(false);
@@ -263,11 +273,13 @@ async function status() {
     image: container?.image || "",
     internalPort: config.internalPort,
     path: config.appPath,
-    ...(config.output ? {
-      outputParent: config.allowedRoot,
-      outputDir,
-      outputContainerDir: env[config.outputContainerKey] || containerLinkPath(),
-    } : {}),
+    ...(config.output
+      ? {
+          outputParent: config.allowedRoot,
+          outputDir,
+          outputContainerDir: env[config.outputContainerKey] || containerLinkPath(),
+        }
+      : {}),
   };
 }
 
@@ -294,7 +306,11 @@ async function access() {
   if (!user) return { folders: [] };
   const folders = [];
   if (config.dataDir) {
-    folders.push({ key: "data", path: await dataHostPath(), ...(await probe(config.dataDir, user)) });
+    folders.push({
+      key: "data",
+      path: await dataHostPath(),
+      ...(await probe(config.dataDir, user)),
+    });
   }
   if (config.output && outputDir) {
     const host = hostPath(outputDir, config.allowedRoot, config.hostRoot);
@@ -339,8 +355,10 @@ function escapeHtml(value) {
 }
 
 function isSecure(request) {
-  return Boolean(request.socket.encrypted)
-    || String(request.headers["x-forwarded-proto"] || "").toLowerCase() === "https";
+  return (
+    Boolean(request.socket.encrypted) ||
+    String(request.headers["x-forwarded-proto"] || "").toLowerCase() === "https"
+  );
 }
 
 function forwardedPrefix(request) {
@@ -361,16 +379,20 @@ function unauthorized(response, request) {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
   });
-  response.end(page({
-    title: pageText(request, "signInTitle"),
-    heading: pageText(request, "signIn"),
-    body: `<p>${escapeHtml(pageText(request, "signInBody"))}</p>`
-      + `<p><a href="${escapeHtml(login)}">${escapeHtml(pageText(request, "openDsm"))}</a></p>`,
-    // Inside the DSM window the user is still signed in to DSM: ask the wrapper for a fresh
-    // bridge session instead of showing this page (sessions end after idling or a restart).
-    script: "if (window.parent !== window) { document.body.style.visibility = 'hidden';"
-      + " parent.postMessage({ type: 'bridge:reauth' }, location.origin); }",
-  }));
+  response.end(
+    page({
+      title: pageText(request, "signInTitle"),
+      heading: pageText(request, "signIn"),
+      body:
+        `<p>${escapeHtml(pageText(request, "signInBody"))}</p>` +
+        `<p><a href="${escapeHtml(login)}">${escapeHtml(pageText(request, "openDsm"))}</a></p>`,
+      // Inside the DSM window the user is still signed in to DSM: ask the wrapper for a fresh
+      // bridge session instead of showing this page (sessions end after idling or a restart).
+      script:
+        "if (window.parent !== window) { document.body.style.visibility = 'hidden';" +
+        " parent.postMessage({ type: 'bridge:reauth' }, location.origin); }",
+    }),
+  );
 }
 
 async function publicHandler(request, response) {
@@ -442,7 +464,10 @@ async function publicHandler(request, response) {
 function anonymousHandler(request, response) {
   const target = publicTarget(request.url, config.publicPaths);
   if (!target || !["GET", "HEAD", "POST"].includes(request.method)) {
-    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    response.writeHead(404, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
     response.end("Not found\n");
     return;
   }
@@ -538,7 +563,7 @@ async function removeLegacyLink(relative) {
   }
   const legacy = path.posix.join(config.hostRoot, LEGACY_LINK);
   try {
-    if (await fs.readlink(legacy) === relative) {
+    if ((await fs.readlink(legacy)) === relative) {
       await fs.rm(legacy);
       log("info", "removed shared output link of an earlier version", { link: legacy });
     }
@@ -783,8 +808,10 @@ async function prepareSecret() {
   if (!config.identityHeaders || !config.dataDir) return;
   try {
     const container = await inspectContainer(config.container);
-    identitySecret = await ensureSecret(path.posix.join(config.dataDir, ".bridge-secret"),
-      parseUser(container?.user));
+    identitySecret = await ensureSecret(
+      path.posix.join(config.dataDir, ".bridge-secret"),
+      parseUser(container?.user),
+    );
   } catch (error) {
     log("warn", "identity secret could not be prepared", { error: error.message });
   }

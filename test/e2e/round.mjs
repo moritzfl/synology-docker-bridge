@@ -1,13 +1,13 @@
 // One full verification round: install every SPK, run the window test for each, the rights test
 // (first package, next to the second) over HTTPS and HTTP, and the Login Portal test.
 // Usage: node round.mjs <first.spk> [<second.spk>...]
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { HTTP, HTTPS, guest, logger, packageInfo } from './lib.mjs';
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { HTTP, HTTPS, guest, logger, packageInfo } from "./lib.mjs";
 
 const spks = process.argv.slice(2);
 if (spks.length === 0) {
-  console.error('usage: node round.mjs <file.spk>...');
+  console.error("usage: node round.mjs <file.spk>...");
   process.exit(2);
 }
 const log = logger();
@@ -16,28 +16,34 @@ const results = [];
 
 function run(label, script, args, env = {}) {
   log(`=== ${label}`);
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL(script, import.meta.url)), ...args], { stdio: 'inherit', env: { ...process.env, ...env } });
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL(script, import.meta.url)), ...args],
+    { stdio: "inherit", env: { ...process.env, ...env } },
+  );
   results.push([label, result.status === 0]);
 }
 
-run('install', 'install.mjs', spks);
+run("install", "install.mjs", spks);
 if (!results[0][1]) process.exit(1);
-log(`listeners: ${guest("netstat -ltnp 2>/dev/null | grep node | awk '{print $4}' | tr '\\n' ' '").trim()}`);
+log(
+  `listeners: ${guest("netstat -ltnp 2>/dev/null | grep node | awk '{print $4}' | tr '\\n' ' '").trim()}`,
+);
 for (const pkg of packages) {
-  run(`window ${pkg.id}`, 'window.mjs', [pkg.id, pkg.app]);
-  run(`access ${pkg.id}`, 'access.mjs', [pkg.id, pkg.app]);
+  run(`window ${pkg.id}`, "window.mjs", [pkg.id, pkg.app]);
+  run(`access ${pkg.id}`, "access.mjs", [pkg.id, pkg.app]);
 }
 const [first, second] = packages;
 const pair = second ? [second.id, second.app] : [];
-run(`rights ${first.id} (HTTPS)`, 'rights.mjs', [first.id, first.app, ...pair], { DSM_URL: HTTPS });
-run(`rights ${first.id} (HTTP)`, 'rights.mjs', [first.id, first.app], { DSM_URL: HTTP });
+run(`rights ${first.id} (HTTPS)`, "rights.mjs", [first.id, first.app, ...pair], { DSM_URL: HTTPS });
+run(`rights ${first.id} (HTTP)`, "rights.mjs", [first.id, first.app], { DSM_URL: HTTP });
 for (const pkg of packages) {
-  run(`portal ${pkg.id}`, 'portal.mjs', [pkg.id]);
+  run(`portal ${pkg.id}`, "portal.mjs", [pkg.id]);
 }
-if (packages.some(({ id }) => id === 'dsm-nginx-demo')) {
-  run('nginx demo layout', 'layout.mjs', ['--portal']);
+if (packages.some(({ id }) => id === "dsm-nginx-demo")) {
+  run("nginx demo layout", "layout.mjs", ["--portal"]);
 }
 
-log('=== summary');
-for (const [label, ok] of results) log(`${ok ? 'PASS' : 'FAIL'} ${label}`);
+log("=== summary");
+for (const [label, ok] of results) log(`${ok ? "PASS" : "FAIL"} ${label}`);
 process.exit(results.every(([, ok]) => ok) ? 0 : 1);

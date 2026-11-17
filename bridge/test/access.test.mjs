@@ -18,7 +18,9 @@ test("offers no check for root, user names or no user", () => {
 
 test("a missing folder is reported as missing, without running a probe", async () => {
   let ran = false;
-  const result = await probe("/no/such/folder", { uid: 1, gid: 1 }, async () => { ran = true; });
+  const result = await probe("/no/such/folder", { uid: 1, gid: 1 }, async () => {
+    ran = true;
+  });
   assert.deepEqual(result, { exists: false, read: false, write: false });
   assert.equal(ran, false);
 });
@@ -37,7 +39,9 @@ test("the probe runs as the app's user and reports what it could do", async () =
 
 test("a probe that cannot run counts as no access", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "access-"));
-  const result = await probe(dir, { uid: 1, gid: 1 }, async () => { throw new Error("EPERM"); });
+  const result = await probe(dir, { uid: 1, gid: 1 }, async () => {
+    throw new Error("EPERM");
+  });
   assert.deepEqual(result, { exists: true, read: false, write: false });
 });
 

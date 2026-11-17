@@ -29,8 +29,19 @@ test("checks realpath containment", () => {
 
 test("finds the output share's volume from DSM's package link", async () => {
   const { shareRoot } = await import("../src/config.mjs");
-  assert.equal(shareRoot("/run/shares/music", () => "/volume2/music"), "/volume2/music");
-  assert.equal(shareRoot("/run/shares/music", () => "/elsewhere/music"), "");
-  assert.equal(shareRoot("/run/shares/music", () => { throw new Error("ENOENT"); }), "");
+  assert.equal(
+    shareRoot("/run/shares/music", () => "/volume2/music"),
+    "/volume2/music",
+  );
+  assert.equal(
+    shareRoot("/run/shares/music", () => "/elsewhere/music"),
+    "",
+  );
+  assert.equal(
+    shareRoot("/run/shares/music", () => {
+      throw new Error("ENOENT");
+    }),
+    "",
+  );
   assert.equal(shareRoot(""), "");
 });

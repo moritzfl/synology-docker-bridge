@@ -30,7 +30,12 @@ function docker(running, inUse = []) {
 test("first start only records the current images", async () => {
   const file = await stateFile(null);
   const fake = docker({ app: "sha:app1", "app-bridge": "sha:bridge1" });
-  await pruneSuperseded({ stateFile: file, containers: ["app", "app-bridge"], ...fake, log: quiet });
+  await pruneSuperseded({
+    stateFile: file,
+    containers: ["app", "app-bridge"],
+    ...fake,
+    log: quiet,
+  });
   assert.deepEqual(fake.removed, []);
   assert.deepEqual(JSON.parse(await fs.readFile(file, "utf8")).images, ["sha:app1", "sha:bridge1"]);
 });
@@ -39,7 +44,10 @@ test("after an upgrade the replaced images are removed", async () => {
   const file = await stateFile(["sha:app1", "sha:bridge1"]);
   const fake = docker({ app: "sha:app2", "app-bridge": "sha:bridge2" });
   const result = await pruneSuperseded({
-    stateFile: file, containers: ["app", "app-bridge"], ...fake, log: quiet,
+    stateFile: file,
+    containers: ["app", "app-bridge"],
+    ...fake,
+    log: quiet,
   });
   assert.deepEqual(result.removed, ["sha:app1", "sha:bridge1"]);
   assert.deepEqual(JSON.parse(await fs.readFile(file, "utf8")).images, ["sha:app2", "sha:bridge2"]);
@@ -49,7 +57,10 @@ test("images still used elsewhere are kept and retried later", async () => {
   const file = await stateFile(["sha:shared"]);
   const fake = docker({ app: "sha:app2", "app-bridge": "sha:bridge2" }, ["sha:shared"]);
   const result = await pruneSuperseded({
-    stateFile: file, containers: ["app", "app-bridge"], ...fake, log: quiet,
+    stateFile: file,
+    containers: ["app", "app-bridge"],
+    ...fake,
+    log: quiet,
   });
   assert.deepEqual(result.removed, []);
   assert.ok(JSON.parse(await fs.readFile(file, "utf8")).images.includes("sha:shared"));
@@ -58,6 +69,11 @@ test("images still used elsewhere are kept and retried later", async () => {
 test("nothing is removed while a container is missing", async () => {
   const file = await stateFile(["sha:app1"]);
   const fake = docker({ "app-bridge": "sha:bridge2" });
-  await pruneSuperseded({ stateFile: file, containers: ["app", "app-bridge"], ...fake, log: quiet });
+  await pruneSuperseded({
+    stateFile: file,
+    containers: ["app", "app-bridge"],
+    ...fake,
+    log: quiet,
+  });
   assert.deepEqual(fake.removed, [], "the old app image may be what Container Manager restores");
 });

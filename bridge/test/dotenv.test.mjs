@@ -24,5 +24,7 @@ test("writes values atomically and keeps spaces quoted", () => {
   const values = dotenv.read(file);
   assert.equal(values.APP_PORT, "8742");
   assert.equal(values.APP_OUTPUT_DIR, "/volume1/music/My Recordings");
-  assert.ok(fs.readFileSync(file, "utf8").includes('APP_OUTPUT_DIR="/volume1/music/My Recordings"'));
+  assert.ok(
+    fs.readFileSync(file, "utf8").includes('APP_OUTPUT_DIR="/volume1/music/My Recordings"'),
+  );
 });

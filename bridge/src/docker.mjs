@@ -19,28 +19,31 @@ export class DockerError extends Error {
 export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 60_000 } = {}) {
   function request(method, path, { timeout = timeoutMs } = {}) {
     return new Promise((resolve, reject) => {
-      const req = http.request({
-        socketPath,
-        method,
-        path,
-        headers: { Host: "docker", "Content-Type": "application/json" },
-      }, (response) => {
-        const chunks = [];
-        response.on("data", (chunk) => chunks.push(chunk));
-        response.on("end", () => {
-          const text = Buffer.concat(chunks).toString("utf8");
-          let body = null;
-          if (text) {
-            try {
-              body = JSON.parse(text);
-            } catch {
-              body = { message: text.trim() };
+      const req = http.request(
+        {
+          socketPath,
+          method,
+          path,
+          headers: { Host: "docker", "Content-Type": "application/json" },
+        },
+        (response) => {
+          const chunks = [];
+          response.on("data", (chunk) => chunks.push(chunk));
+          response.on("end", () => {
+            const text = Buffer.concat(chunks).toString("utf8");
+            let body = null;
+            if (text) {
+              try {
+                body = JSON.parse(text);
+              } catch {
+                body = { message: text.trim() };
+              }
             }
-          }
-          resolve({ status: response.statusCode, body });
-        });
-        response.on("error", reject);
-      });
+            resolve({ status: response.statusCode, body });
+          });
+          response.on("error", reject);
+        },
+      );
       req.setTimeout(timeout, () => {
         req.destroy(new DockerError(504, `docker ${method} ${path} timed out`));
       });
@@ -59,8 +62,9 @@ export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 
   return {
     /** Container details, or null when it does not exist. */
     async inspect(container) {
-      const response = await request("GET", `/containers/${name(container)}/json`,
-        { timeout: 15_000 });
+      const response = await request("GET", `/containers/${name(container)}/json`, {
+        timeout: 15_000,
+      });
       if (response.status === 404) return null;
       if (response.status !== 200) throw fail(response, `inspect ${container}`);
       return summarize(response.body);
@@ -76,8 +80,9 @@ export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 
 
     /** Stops a container, giving it {@code seconds} to shut down; already stopped is fine. */
     async stop(container, seconds = 30) {
-      const response = await request("POST", `/containers/${name(container)}/stop?t=${seconds}`,
-        { timeout: (seconds + 30) * 1000 });
+      const response = await request("POST", `/containers/${name(container)}/stop?t=${seconds}`, {
+        timeout: (seconds + 30) * 1000,
+      });
       if (response.status !== 204 && response.status !== 304) {
         throw fail(response, `stop ${container}`);
       }
@@ -85,9 +90,11 @@ export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 
 
     /** Restarts a container; a stopped one is simply started. */
     async restart(container, seconds = 30) {
-      const response = await request("POST",
+      const response = await request(
+        "POST",
         `/containers/${name(container)}/restart?t=${seconds}`,
-        { timeout: (seconds + 60) * 1000 });
+        { timeout: (seconds + 60) * 1000 },
+      );
       if (response.status !== 204) throw fail(response, `restart ${container}`);
     },
 

@@ -24,8 +24,8 @@ export function shareRoot(link, readlink = fs.readlinkSync) {
 
 export function loadConfig(env = process.env) {
   const tokenFile = env.BRIDGE_TOKEN_FILE || "/run/bridge/token";
-  const token = env.BRIDGE_TOKEN
-    || (fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, "utf8").trim() : "");
+  const token =
+    env.BRIDGE_TOKEN || (fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, "utf8").trim() : "");
   return {
     token,
     tokenFile,

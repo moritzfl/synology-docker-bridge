@@ -57,7 +57,8 @@ export function createAuthenticator(config) {
   return {
     mint(identity) {
       prune();
-      const { user = "", groups = [] } = typeof identity === "string" ? { user: identity } : identity || {};
+      const { user = "", groups = [] } =
+        typeof identity === "string" ? { user: identity } : identity || {};
       const token = crypto.randomBytes(24).toString("base64url");
       oneTime.set(token, {
         user: String(user),
@@ -136,8 +137,10 @@ export function createAuthenticator(config) {
       // A browser-session cookie: the bridge enforces the idle timeout, so the cookie must not
       // expire on its own while the app is in use. The path keeps it to this package's proxy, so
       // two packages open side by side never replace each other's session.
-      return `dsm_bridge_session=${session}; Path=${path}; HttpOnly; SameSite=Lax`
-        + (secure ? "; Secure" : "");
+      return (
+        `dsm_bridge_session=${session}; Path=${path}; HttpOnly; SameSite=Lax` +
+        (secure ? "; Secure" : "")
+      );
     },
   };
 }
@@ -146,7 +149,8 @@ function cookieValues(header, name) {
   if (!header) {
     return [];
   }
-  return header.split(";")
+  return header
+    .split(";")
     .map((part) => part.trim())
     .filter((part) => part.startsWith(`${name}=`))
     .map((part) => part.slice(name.length + 1))

@@ -40,16 +40,16 @@ the bridge's.
 
 ## Repository layout
 
-| Path | Purpose |
-| --- | --- |
-| `bridge/` | Node.js bridge: proxy, sessions, control API, Docker Engine API, folder moves |
-| `packaging/generate.mjs` | SPK generator; `--check` validates a config without Docker |
-| `packaging/app.schema.json` | JSON schema for app configs (editor completion and checks) |
-| `packaging/texts.json` | Every text the window shows, in English and German |
-| `packaging/templates/` | SPK template: INFO, compose, scripts, DSM AppWindow, CGI, nginx and Login Portal config |
-| `packaging/test/`, `bridge/test/` | Unit tests (`npm test`) |
-| `test/e2e/` | Installs real SPKs in Virtual DSM and drives their windows; see its README |
-| `examples/nginx/` | Demo: nginx plus a `/whoami` page that shows the identity headers |
+| Path                              | Purpose                                                                                 |
+| --------------------------------- | --------------------------------------------------------------------------------------- |
+| `bridge/`                         | Node.js bridge: proxy, sessions, control API, Docker Engine API, folder moves           |
+| `packaging/generate.mjs`          | SPK generator; `--check` validates a config without Docker                              |
+| `packaging/app.schema.json`       | JSON schema for app configs (editor completion and checks)                              |
+| `packaging/texts.json`            | Every text the window shows, in English and German                                      |
+| `packaging/templates/`            | SPK template: INFO, compose, scripts, DSM AppWindow, CGI, nginx and Login Portal config |
+| `packaging/test/`, `bridge/test/` | Unit tests (`npm test`)                                                                 |
+| `test/e2e/`                       | Installs real SPKs in Virtual DSM and drives their windows; see its README              |
+| `examples/nginx/`                 | Demo: nginx plus a `/whoami` page that shows the identity headers                       |
 
 ## Quick start
 
@@ -87,28 +87,28 @@ A minimal config:
 
 Everything else has a default; `app.schema.json` documents every field. The ones most apps touch:
 
-| Field | Meaning |
-| --- | --- |
-| `id` | Package name; also the data share, container, and Login Portal alias. Lowercase and dashes |
-| `icon` | One square SVG, drawn at every size DSM uses. Or `icons`: a folder of ready-made PNGs |
-| `image`, `appBuild` | The local app image to embed, and an optional command that builds it (run in `appDir`, with `SPK_PLATFORM` set to the Docker platform, e.g. `linux/arm64`) |
-| `arch` | `x86_64` (default) or `armv8` for ARM models with Container Manager; `--arch` overrides it per build, so one config yields both packages |
-| `containerPort` | Port the app listens on inside its container |
-| `networkMode` | `bridge` (default) or `host`; with `host`, `internalPort` must equal `containerPort` |
-| `appPath` | Web path of the app's UI (`/` or `/app/`) |
-| `appUser` | User the app runs as. Default: the image's own, like `docker run` (root when the image sets none). `package`: the package's own DSM user; see [Which folders the app may use](#which-folders-the-app-may-use) |
-| `init` | `true`: a minimal init in the app container reaps orphaned child processes (`docker run --init`) |
-| `publicPaths` | App paths devices may fetch without signing in, e.g. `["/media/"]`; see [Paths without sign-in](#paths-without-sign-in) |
-| `hostTimezone` | Default `true`: `TZ` names the NAS time zone, e.g. `Europe/Berlin`, read on install and upgrade. An app's own `TZ` in `appEnv` wins |
-| `appEnv` | Extra environment; `${APP_CONTAINER_PORT}` and `${APP_OUTPUT_CONTAINER_DIR}` are filled in |
-| `dataDir` | Host folder mounted at `/data`. Default: the package's own shared folder (administrators only), on whichever volume DSM created it |
-| `output` | `false` for apps that write nothing to a share: no folder setting, no share mounted |
-| `outputShare`, `outputSubdir` | The shared folder the folder must be in (`music`) and the first folder in it (`id`). DSM creates the share when it is missing, the way its own media apps do; an existing share keeps its permissions. The package finds it on any volume |
-| `outputLabel` | What the folder is called, as text or `{ "enu": …, "ger": … }` |
-| `displayNameGer`, `descriptionGer` | German name and Package Center description |
-| `allUsers` | `true`: every DSM user may open the app. Default `false`: administrators grant it |
-| `identityHeaders` | `true`: the app receives `Remote-User` and `Remote-Groups` for the signed-in DSM user |
-| `authMode` | `token` (default) or `none` for apps with their own sign-in |
+| Field                              | Meaning                                                                                                                                                                                                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                               | Package name; also the data share, container, and Login Portal alias. Lowercase and dashes                                                                                                                                                |
+| `icon`                             | One square SVG, drawn at every size DSM uses. Or `icons`: a folder of ready-made PNGs                                                                                                                                                     |
+| `image`, `appBuild`                | The local app image to embed, and an optional command that builds it (run in `appDir`, with `SPK_PLATFORM` set to the Docker platform, e.g. `linux/arm64`)                                                                                |
+| `arch`                             | `x86_64` (default) or `armv8` for ARM models with Container Manager; `--arch` overrides it per build, so one config yields both packages                                                                                                  |
+| `containerPort`                    | Port the app listens on inside its container                                                                                                                                                                                              |
+| `networkMode`                      | `bridge` (default) or `host`; with `host`, `internalPort` must equal `containerPort`                                                                                                                                                      |
+| `appPath`                          | Web path of the app's UI (`/` or `/app/`)                                                                                                                                                                                                 |
+| `appUser`                          | User the app runs as. Default: the image's own, like `docker run` (root when the image sets none). `package`: the package's own DSM user; see [Which folders the app may use](#which-folders-the-app-may-use)                             |
+| `init`                             | `true`: a minimal init in the app container reaps orphaned child processes (`docker run --init`)                                                                                                                                          |
+| `publicPaths`                      | App paths devices may fetch without signing in, e.g. `["/media/"]`; see [Paths without sign-in](#paths-without-sign-in)                                                                                                                   |
+| `hostTimezone`                     | Default `true`: `TZ` names the NAS time zone, e.g. `Europe/Berlin`, read on install and upgrade. An app's own `TZ` in `appEnv` wins                                                                                                       |
+| `appEnv`                           | Extra environment; `${APP_CONTAINER_PORT}` and `${APP_OUTPUT_CONTAINER_DIR}` are filled in                                                                                                                                                |
+| `dataDir`                          | Host folder mounted at `/data`. Default: the package's own shared folder (administrators only), on whichever volume DSM created it                                                                                                        |
+| `output`                           | `false` for apps that write nothing to a share: no folder setting, no share mounted                                                                                                                                                       |
+| `outputShare`, `outputSubdir`      | The shared folder the folder must be in (`music`) and the first folder in it (`id`). DSM creates the share when it is missing, the way its own media apps do; an existing share keeps its permissions. The package finds it on any volume |
+| `outputLabel`                      | What the folder is called, as text or `{ "enu": …, "ger": … }`                                                                                                                                                                            |
+| `displayNameGer`, `descriptionGer` | German name and Package Center description                                                                                                                                                                                                |
+| `allUsers`                         | `true`: every DSM user may open the app. Default `false`: administrators grant it                                                                                                                                                         |
+| `identityHeaders`                  | `true`: the app receives `Remote-User` and `Remote-Groups` for the signed-in DSM user                                                                                                                                                     |
+| `authMode`                         | `token` (default) or `none` for apps with their own sign-in                                                                                                                                                                               |
 
 Derived when not given: `dsmAppName` (`my-app` → `MyApp`), `container` (`id`), `internalPort` and
 the bridge control port (from `id`, so packages never collide), `bridgeImage` (`<id>-bridge:spk`).
