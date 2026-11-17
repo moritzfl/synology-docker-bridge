@@ -91,7 +91,15 @@
     "configChanged": "Someone else saved the settings in the meantime. Copy your changes, close this window and open the settings again.",
     "configBusy": "Settings are being applied right now. Try again in a moment.",
     "configTooLarge": "The settings file is too large to edit here.",
-    "configNotAFile": "The settings file is not a regular file and cannot be edited here."
+    "configNotAFile": "The settings file is not a regular file and cannot be edited here.",
+    "updateButton": "Update available",
+    "updateTitle": "{app} {version} is available",
+    "updateCurrent": "This NAS runs {app} {current}.",
+    "updateHow": "Download the new package and install it in Package Center > Manual Install.",
+    "updateHowNoUrl": "Get the new package from the publisher of {app} and install it in Package Center > Manual Install.",
+    "updateKeeps": "The data and settings of {app} stay as they are.",
+    "updateDownload": "Download package",
+    "updateSkip": "Skip this version"
   },
   "ger": {
     "opening": "{app} wird geöffnet",
@@ -185,6 +193,14 @@
     "configChanged": "Jemand anderes hat die Einstellungen inzwischen gespeichert. Kopieren Sie Ihre Änderungen, schließen Sie dieses Fenster und öffnen Sie die Einstellungen erneut.",
     "configBusy": "Gerade werden Einstellungen übernommen. Versuchen Sie es gleich noch einmal.",
     "configTooLarge": "Die Einstellungsdatei ist zu groß, um sie hier zu bearbeiten.",
-    "configNotAFile": "Die Einstellungsdatei ist keine normale Datei und kann hier nicht bearbeitet werden."
+    "configNotAFile": "Die Einstellungsdatei ist keine normale Datei und kann hier nicht bearbeitet werden.",
+    "updateButton": "Update verfügbar",
+    "updateTitle": "{app} {version} ist verfügbar",
+    "updateCurrent": "Auf diesem NAS läuft {app} {current}.",
+    "updateHow": "Laden Sie das neue Paket herunter und installieren Sie es im Paket-Zentrum unter Manuelle Installation.",
+    "updateHowNoUrl": "Holen Sie das neue Paket beim Herausgeber von {app} und installieren Sie es im Paket-Zentrum unter Manuelle Installation.",
+    "updateKeeps": "Daten und Einstellungen von {app} bleiben erhalten.",
+    "updateDownload": "Paket herunterladen",
+    "updateSkip": "Diese Version überspringen"
   }
 }

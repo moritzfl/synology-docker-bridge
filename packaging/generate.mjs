@@ -88,6 +88,7 @@ const UI_SCRIPTS = [
   "settings.cgi",
   "access.cgi",
   "config.cgi",
+  "updates.cgi",
 ];
 
 /** Width / height of an SVG from its viewBox, else its width and height; 1 when unknown. */
@@ -390,6 +391,32 @@ function parseConfigFile(value) {
   return { file, check, ready, label };
 }
 
+/**
+ * Where to look for newer versions: the published image (default: the packaged one) and the
+ * version the package carries (default: its tag), plus where administrators get the new package.
+ */
+function parseUpdates(value, image) {
+  if (value === undefined || value === false) return null;
+  const updates = value === true ? {} : value;
+  if (!updates || typeof updates !== "object" || Array.isArray(updates)) {
+    throw new Error("updates must be true or { image, current, url }");
+  }
+  const published = String(updates.image || image);
+  if (!/^[a-z0-9][a-z0-9._/:-]*$/i.test(published)) {
+    throw new Error("updates image must be an image reference such as org/app:1.2.3");
+  }
+  const tag = published.includes(":") ? published.slice(published.lastIndexOf(":") + 1) : "";
+  const current = String(updates.current || tag);
+  if (!/^v?\d+(\.\d+){0,3}$/.test(current)) {
+    throw new Error("updates needs the image tag to be a release such as 1.2.3, or current");
+  }
+  const url = String(updates.url || "");
+  if (url && !/^https?:\/\/[^\s"'<>\\]+$/.test(url)) {
+    throw new Error("updates url must be an http(s) address");
+  }
+  return { image: published, current, url };
+}
+
 /** The app runs as the package's own DSM user, so DSM permissions decide what it may access. */
 export function packageUser(config) {
   return config.appUser === "package";
@@ -566,6 +593,8 @@ export function resolve(raw, configDir) {
   config.files = parseFiles(config.files, config.appDir);
   const command = config.command === undefined ? null : stringList(config.command, "command");
   const configFile = parseConfigFile(config.configFile);
+  const updates = parseUpdates(config.updates, config.image);
+  config.updates = updates;
   const webPorts = parseWebPorts(config.webPorts);
   if (
     webPorts &&
@@ -728,6 +757,10 @@ export function resolve(raw, configDir) {
     appEnvironment,
     appOutputVolume: outputVolume(config.outputContainerRoot),
     appCommand: command ? `    command: ${composeValue(command)}` : "",
+    updatesImage: updates ? updates.image : "",
+    updatesCurrent: updates ? updates.current : "",
+    updatesUrl: updates ? composeValue(updates.url).slice(1, -1) : "",
+    updatesEnabled: updates ? "true" : "false",
     configFile: configFile ? configFile.file : "",
     configCheck: composeValue(JSON.stringify(configFile ? configFile.check : [])),
     configReady: composeValue(JSON.stringify(configFile ? configFile.ready : [])),

@@ -163,6 +163,31 @@
         }
       ]
     },
+    "updates": {
+      "description": "Look for newer versions of the published image once a day. Administrators see a small \"Update available\" button in the window, pointing to url. true uses the packaged image and its tag.",
+      "oneOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "string",
+              "description": "Published image, e.g. org/app:1.2.3 on Docker Hub or ghcr.io/org/app:1.2.3; default: image."
+            },
+            "current": {
+              "type": "string",
+              "description": "Version the package carries; default: the image's tag."
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "description": "Where administrators download the new package, e.g. the project's latest release."
+            }
+          }
+        }
+      ]
+    },
     "files": {
       "type": "object",
       "propertyNames": { "pattern": "^/[A-Za-z0-9._/-]+$" },

@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import httpProxy from "http-proxy";
 import { createAuthenticator } from "./auth.mjs";
 import { ConfigError, createConfigFile } from "./config-file.mjs";
+import { createUpdates } from "./updates.mjs";
 import { loadConfig } from "./config.mjs";
 import { dropDsmCookies, onlyCookies, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
 import { parseUser, probe } from "./access.mjs";
@@ -81,6 +82,17 @@ const configFile =
         log,
         settleMs: config.configSettleSeconds * 1000,
         timeoutMs: config.configTimeoutSeconds * 1000,
+      })
+    : null;
+
+const updates =
+  config.updatesImage && config.updatesCurrent
+    ? createUpdates({
+        image: config.updatesImage,
+        current: config.updatesCurrent,
+        url: config.updatesUrl,
+        stateFile: config.updatesStateFile,
+        log,
       })
     : null;
 
@@ -321,6 +333,7 @@ async function status() {
     image: container?.image || "",
     internalPort: config.internalPort,
     path: config.appPath,
+    ...(updates ? { update: updates.status() } : {}),
     ...(config.output
       ? {
           outputParent: config.allowedRoot,
@@ -823,6 +836,15 @@ async function handleControl(request, response) {
     sendJson(response, 200, await ensureOutput(body.path, body.moveExisting !== false));
     return;
   }
+  if (url.pathname === "/updates" && updates) {
+    if (request.method === "POST") {
+      const body = await readJson(request);
+      sendJson(response, 200, await updates.skip(String(body.skip || "")));
+    } else {
+      sendJson(response, 200, updates.status());
+    }
+    return;
+  }
   if (url.pathname === "/config" || url.pathname === "/config/status") {
     if (!configFile) {
       sendJson(response, 404, { error: "no settings file" });
@@ -934,6 +956,10 @@ async function main() {
     control: `127.0.0.1:${config.controlPort}`,
     target: `127.0.0.1:${config.internalPort}`,
   });
+
+  if (updates) {
+    await updates.start();
+  }
 
   if (config.imageStateFile) {
     // Give Container Manager a minute to finish starting both containers after an upgrade.

@@ -66,6 +66,10 @@ services:
       BRIDGE_CONFIG_FILE: "{{configFile}}"
       BRIDGE_CONFIG_CHECK: {{configCheck}}
       BRIDGE_CONFIG_READY: {{configReady}}
+      BRIDGE_UPDATES_IMAGE: "{{updatesImage}}"
+      BRIDGE_UPDATES_CURRENT: "{{updatesCurrent}}"
+      BRIDGE_UPDATES_URL: "{{updatesUrl}}"
+      BRIDGE_UPDATES_STATE: /run/bridge/updates.json
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/packages/{{id}}/target/docker:/compose

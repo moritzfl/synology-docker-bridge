@@ -87,5 +87,11 @@ export function loadConfig(env = process.env) {
     configReady: list(env.BRIDGE_CONFIG_READY),
     configSettleSeconds: integer(env.BRIDGE_CONFIG_SETTLE_SECONDS, 30),
     configTimeoutSeconds: integer(env.BRIDGE_CONFIG_TIMEOUT_SECONDS, 600),
+    // The published image to look for newer versions of, the version the package carries, and
+    // where administrators get the new package.
+    updatesImage: env.BRIDGE_UPDATES_IMAGE || "",
+    updatesCurrent: env.BRIDGE_UPDATES_CURRENT || "",
+    updatesUrl: env.BRIDGE_UPDATES_URL || "",
+    updatesStateFile: env.BRIDGE_UPDATES_STATE || "",
   };
 }

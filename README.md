@@ -113,6 +113,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `publicCookies`                    | The app's cookies visitors without a session keep on `publicPaths`, e.g. `["csrftoken"]`                                                                                                                                                  |
 | `command`                          | Start command for the unmodified image, e.g. a script brought in with `files` that then runs the image's own                                                                                                                              |
 | `configFile`                       | A settings file in the data folder that administrators edit in the window; see [Settings](#settings)                                                                                                                                      |
+| `updates`                          | Look for newer versions of the published image; see [Updates](#updates)                                                                                                                                                                   |
 | `authMode`                         | `token` (default) or `none` for apps with their own sign-in                                                                                                                                                                               |
 
 Derived when not given: `dsmAppName` (`my-app` → `MyApp`), `container` (`id`), `internalPort` and
@@ -268,6 +269,24 @@ app unusable:
 - The file is the app's own: it stays in the data folder across upgrades and can still be edited
   there directly, without the check.
 
+## Updates
+
+Publishers usually ship a new package with each new image. With `updates`, the bridge looks for
+those versions: once a day it lists the published image's tags anonymously, as `docker pull`
+would, from Docker Hub, GitHub, Quay or any other registry, and keeps the newest release tag above
+the version the package carries. Tags such as `latest` or pre-releases such as `5.0.0a3` do not
+count.
+
+- Administrators see a small **Update available** button on the right of the window's toolbar.
+  It opens a short dialog: the new and the installed version, a link to `updates.url` (where the
+  publisher offers the package), and how to install it in Package Center. **Skip this version**
+  hides the button until the next one. Other users never see it.
+- `updates: true` checks the packaged image under its own tag. For a locally built image, name the
+  published one in `updates.image` and the version in `updates.current`.
+- DSM's own notifications are not available: DSM refuses notification texts (`sysnotify`) and
+  scheduled jobs from packages it did not sign, and its desktop notifications only take texts
+  DSM registered. The hint therefore stays in the window, where administrators act on it.
+
 ## Paths without sign-in
 
 Some apps hand other devices or people a link: a speaker downloads audio, an OAuth provider sends
@@ -344,6 +363,7 @@ component. With `identityHeaders`, it also reads `/etc` (read-only) for DSM's us
 - **Restart**: restarts the app container.
 - **Settings**: reads and writes the app's settings file, runs its check in the app's container
   (Docker exec), and restores the previous file when the app does not come back.
+- **Updates**: lists the published image's tags daily and keeps the newest release.
 - **Status**: container state plus a real HTTP probe of the app.
 - **State**: writes both `/compose/.env` (Compose substitution) and `/run/bridge/app.env`
   (survives package upgrades).

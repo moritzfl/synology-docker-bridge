@@ -233,6 +233,45 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
   }
 });
 
+test("update checks name the published image and where to get the package", () => {
+  const { read, values } = render({
+    ...minimal,
+    id: "my-app",
+    image: "org/my-app:1.4.2",
+    updates: { url: "https://example.com/releases/latest" },
+  });
+  const compose = read("compose.yml");
+  assert.match(compose, /BRIDGE_UPDATES_IMAGE: "org\/my-app:1\.4\.2"/);
+  assert.match(compose, /BRIDGE_UPDATES_CURRENT: "1\.4\.2"/);
+  assert.match(compose, /BRIDGE_UPDATES_URL: "https:\/\/example\.com\/releases\/latest"/);
+  const resource = JSON.parse(read("conf/resource"));
+  for (const internal of ["sysnotify", "synocrond", "synocrond-nonroot"]) {
+    assert.equal(resource[internal], undefined, `DSM refuses ${internal} from other publishers`);
+  }
+  assert.match(read("ui/bridge.js"), /var UPDATES = true;/);
+  assert.equal(values.updatesEnabled, "true");
+
+  const pinned = render({
+    ...minimal,
+    image: "my-app:spk",
+    updates: { image: "ghcr.io/org/app", current: "v2.0" },
+  });
+  assert.match(pinned.read("compose.yml"), /BRIDGE_UPDATES_IMAGE: "ghcr\.io\/org\/app"/);
+  assert.match(pinned.read("compose.yml"), /BRIDGE_UPDATES_CURRENT: "v2\.0"/);
+
+  const none = render(minimal);
+  assert.match(none.read("compose.yml"), /BRIDGE_UPDATES_IMAGE: ""/);
+  assert.match(none.read("ui/bridge.js"), /var UPDATES = false;/);
+
+  for (const bad of [
+    { ...minimal, image: "my-app:spk", updates: true },
+    { ...minimal, image: "org/app:1.0", updates: { url: "javascript:alert(1)" } },
+    { ...minimal, image: "org/app:1.0", updates: [] },
+  ]) {
+    assert.throws(() => resolve(bad, here), /updates/, JSON.stringify(bad.updates));
+  }
+});
+
 test("files the package brings are mounted read-only into the unmodified image", () => {
   const { read } = render({
     ...minimal,

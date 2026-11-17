@@ -13,6 +13,8 @@
   var OUTPUT_LABEL = {{outputLabelJson}};
   // Where folders may be; the package may have fallen back to its own share on this NAS.
   var OUTPUT_PARENT = "{{outputParent}}";
+  // Whether the package looks for newer versions of the app's image.
+  var UPDATES = {{updatesEnabled}};
   // The app's settings file, which administrators edit here; null when the package has none.
   var CONFIG_LABEL = {{configLabelJson}};
   var APP_ID = "SYNO.SDS.{{dsmAppName}}.Instance";
@@ -234,6 +236,15 @@
           ? new Button({ text: t("manage"), menu: new Ext.menu.Menu({ items: items }) })
           : new Button(items[0]);
         tbar = [this.manageButton];
+        if (UPDATES) {
+          // Quiet until a newer version is out; then one small button on the right.
+          this.updateButton = new Button({
+            text: t("updateButton"),
+            hidden: true,
+            handler: function () { self.openUpdate(); },
+          });
+          tbar.push("->", this.updateButton);
+        }
       }
       if (standalone) {
         fitPhoneScreen();
@@ -357,6 +368,10 @@
       var self = this;
       return api(BASE + "status.cgi").then(function (data) {
         self.status = data;
+        if (self.updateButton) {
+          var update = data.update || {};
+          self.updateButton.setVisible(!!update.latest && !update.skipped);
+        }
         var key = STATES[data.state];
         if (data.state === "running" && !data.reachable) key = "state.starting";
         var state = key === undefined ? data.state : (key ? t(key) : "");
@@ -726,6 +741,66 @@
           else self.notifyFrame("bridge:restarting");
         });
       })();
+    },
+
+    /**
+     * A newer version of the app is out. The publisher ships a new package with each image, so
+     * say which version, where to get the package and how to install it; "Skip this version"
+     * hides the button until the next one.
+     */
+    openUpdate: function () {
+      var self = this;
+      var update = (this.status && this.status.update) || {};
+      if (!update.latest) return;
+      if (this.updateWindow && !this.updateWindow.isDestroyed) this.updateWindow.close();
+      function paragraph(text, style) {
+        return "<p style=\"margin:0 0 10px;" + (style || "") + "\">" + escapeHtml(text) + "</p>";
+      }
+      var buttons = [
+        {
+          xtype: "syno_button",
+          btnStyle: "grey",
+          text: t("updateSkip"),
+          handler: function () {
+            win.getEl().mask(t("applying"));
+            api(BASE + "updates.cgi", { method: "POST", body: { skip: update.latest } })
+              .then(function (status) {
+                self.status.update = status;
+                self.updateButton.hide();
+                win.close();
+              })
+              .catch(function (error) {
+                win.getEl().unmask();
+                alertBox(t("updateButton"), escapeHtml(explain(error)));
+              });
+          },
+        },
+        { xtype: "syno_button", btnStyle: "grey", text: t("close"), handler: function () { win.close(); } },
+      ];
+      if (update.url) {
+        buttons.push({
+          xtype: "syno_button",
+          btnStyle: "blue",
+          text: t("updateDownload"),
+          handler: function () { window.open(update.url, "_blank", "noopener"); },
+        });
+      }
+      var win = this.updateWindow = new SYNO.SDS.ModalWindow({
+        owner: this,
+        title: t("updateTitle", { version: update.latest }),
+        width: 520,
+        height: 230,
+        layout: "fit",
+        items: [new Ext.Panel({
+          border: false,
+          bodyStyle: "padding:16px 20px",
+          html: paragraph(t("updateCurrent", { current: update.current }))
+            + paragraph(t(update.url ? "updateHow" : "updateHowNoUrl"))
+            + paragraph(t("updateKeeps"), "color:#6b7685;font-size:12px"),
+        })],
+        buttons: buttons,
+      });
+      win.show();
     },
 
     /** Opens Folder access only when a folder needs attention; silent otherwise. */
