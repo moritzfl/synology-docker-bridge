@@ -290,12 +290,12 @@
      */
     refitOnResize: function () {
       var self = this;
-      var pending = false;
+      var pending = null;
+      var observer = null;
       function refit() {
-        if (pending) return;
-        pending = true;
-        requestAnimationFrame(function () {
-          pending = false;
+        if (pending !== null) return;
+        pending = requestAnimationFrame(function () {
+          pending = null;
           if (self.isDestroyed || !self.rendered) return;
           if (SYNO.SDS.Desktop && SYNO.SDS.Desktop.doLayout) {
             SYNO.SDS.Desktop.doLayout();
@@ -305,10 +305,16 @@
         });
       }
       if (window.ResizeObserver) {
-        new ResizeObserver(refit).observe(document.body);
+        observer = new ResizeObserver(refit);
+        observer.observe(document.body);
       }
       window.addEventListener("resize", refit);
       this.on("afterrender", refit);
+      this.on("destroy", function () {
+        window.removeEventListener("resize", refit);
+        if (observer) observer.disconnect();
+        if (pending !== null) cancelAnimationFrame(pending);
+      });
       refit();
     },
 

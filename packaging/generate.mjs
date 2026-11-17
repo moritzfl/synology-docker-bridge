@@ -483,7 +483,7 @@ function main() {
     check(config, values, archInfo);
     return;
   }
-  const { id, version } = values;
+  const { id } = values;
 
   buildApp(config, archInfo, options.skipAppBuild);
   buildBridge(config, archInfo.platform, options.skipBridgeBuild);
@@ -501,6 +501,27 @@ function main() {
   }
 
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-bridge-"));
+  try {
+    assemblePackage(config, values, archInfo, options, stage);
+  } finally {
+    fs.rmSync(stage, { recursive: true, force: true });
+  }
+}
+
+/** Write beside the destination so publication is a single rename on the same filesystem. */
+export function publishPackage(output, write) {
+  const stage = fs.mkdtempSync(path.join(path.dirname(output), ".spk-"));
+  try {
+    const staged = path.join(stage, path.basename(output));
+    write(staged);
+    fs.renameSync(staged, output);
+  } finally {
+    fs.rmSync(stage, { recursive: true, force: true });
+  }
+}
+
+function assemblePackage(config, values, archInfo, options, stage) {
+  const { id, version } = values;
   const payload = path.join(stage, "payload");
   const pkg = path.join(stage, "spk");
   fs.mkdirSync(path.join(payload, "docker"), { recursive: true });
@@ -567,16 +588,15 @@ function main() {
   const outputDir = path.resolve(options.output || path.join(here, "dist"));
   fs.mkdirSync(outputDir, { recursive: true });
   const output = path.join(outputDir, `${id}-${version}-${archInfo.arch}.spk`);
-  run("tar", [
-    "-C", pkg, "-cf", output,
+  publishPackage(output, (staged) => run("tar", [
+    "-C", pkg, "-cf", staged,
     "INFO", "package.tgz", "PACKAGE_ICON.PNG", "PACKAGE_ICON_256.PNG",
     "scripts", "conf",
-  ], { env: tarEnv });
+  ], { env: tarEnv }));
 
   console.log(`wrote ${output} (${(fs.statSync(output).size / 1024 / 1024).toFixed(1)} MB)`);
   const checksum = execFileSync("shasum", ["-a", "256", output], { encoding: "utf8" }).trim();
   console.log(checksum);
-  fs.rmSync(stage, { recursive: true, force: true });
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

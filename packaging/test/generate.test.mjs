@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { buildApp, dsmNameFor, renderTemplates, resolve } from "../generate.mjs";
+import { runInNewContext } from "node:vm";
+import { buildApp, dsmNameFor, publishPackage, renderTemplates, resolve } from "../generate.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packaging = path.dirname(here);
@@ -188,6 +189,41 @@ test("every text the UI asks for exists in English and German", () => {
   }
 });
 
+test("closing a standalone window removes its resize hooks", () => {
+  const handlers = new Map();
+  const callbacks = new Map();
+  let layout;
+  let resize;
+  let disconnected = false;
+  let cancelled;
+  const { read } = render(minimal);
+  runInNewContext(read("ui/bridge.js"), {
+    Ext: { define: (name, definition) => { if (name.endsWith(".Main")) layout = definition; } },
+    window: {
+      ResizeObserver: true,
+      addEventListener: (name, listener) => handlers.set(name, listener),
+      removeEventListener: (name, listener) => {
+        assert.equal(handlers.get(name), listener);
+        handlers.delete(name);
+      },
+    },
+    document: { body: {} },
+    ResizeObserver: class {
+      constructor(listener) { resize = listener; }
+      observe() {}
+      disconnect() { disconnected = true; }
+    },
+    requestAnimationFrame: () => 17,
+    cancelAnimationFrame: (id) => { cancelled = id; },
+  });
+  layout.refitOnResize.call({ on: (name, listener) => callbacks.set(name, listener) });
+  assert.equal(handlers.get("resize"), resize);
+  callbacks.get("destroy")();
+  assert.equal(handlers.has("resize"), false);
+  assert.equal(disconnected, true);
+  assert.equal(cancelled, 17);
+});
+
 test("the example config passes --check", () => {
   const output = execFileSync(process.execPath, [path.join(packaging, "generate.mjs"), "--config",
     path.join(packaging, "..", "examples", "nginx", "app.json"), "--check"], { encoding: "utf8" });
@@ -212,6 +248,22 @@ test("the app build is told the package's architecture and Docker platform", () 
   const config = { appBuild: 'printf "%s %s" "$SPK_ARCH" "$SPK_PLATFORM" > arch.txt', appDir: dir };
   buildApp(config, { arch: "armv8", platform: "linux/arm64" }, false);
   assert.equal(fs.readFileSync(path.join(dir, "arch.txt"), "utf8"), "armv8 linux/arm64");
+});
+
+test("a failed archive write preserves the previous SPK and cleans up", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "publish-spk-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const output = path.join(dir, "test.spk");
+  fs.writeFileSync(output, "previous");
+  assert.throws(() => publishPackage(output, (staged) => {
+    fs.writeFileSync(staged, "partial");
+    throw new Error("archive failed");
+  }), /archive failed/);
+  assert.equal(fs.readFileSync(output, "utf8"), "previous");
+  assert.deepEqual(fs.readdirSync(dir), ["test.spk"]);
+  publishPackage(output, (staged) => fs.writeFileSync(staged, "complete"));
+  assert.equal(fs.readFileSync(output, "utf8"), "complete");
+  assert.deepEqual(fs.readdirSync(dir), ["test.spk"]);
 });
 
 test("builds a complete SPK from a prebuilt image", { skip: !process.env.GENERATE_BUILD_TEST }, () => {
