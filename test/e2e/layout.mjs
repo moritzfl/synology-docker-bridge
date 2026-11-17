@@ -97,29 +97,47 @@ for (const engine of [chromium, webkit]) {
         throw error;
       });
     }
+    const widgetPanel = page.locator('[syno-id="widget-window-0"]');
+    if (await widgetPanel.isVisible()) {
+      await page.getByRole("button", { name: "Widgets", exact: true }).click();
+      await expect(widgetPanel).toBeHidden();
+    }
+    // DSM remembers window geometry across sign-ins, including a prior maximized state.
+    const restore = win.locator(".x-tool-restore:visible");
+    if (await restore.isVisible()) {
+      await restore.click({ timeout: 15_000 });
+    }
+    const handle = win.locator(".x-resizable-handle-southeast:visible").first();
+    await handle.hover({ timeout: 15_000 });
     const original = await geometry(shell, page);
     await page.screenshot({ path: shot(`${engine.name()}-desktop`) });
 
-    const handle = win.locator(".x-resizable-handle-southeast").first();
-    await handle.hover();
     const corner = await handle.boundingBox();
     assert.ok(corner, "DSM window must expose its resize handle");
-    await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+    const x = corner.x + corner.width / 2;
+    const y = corner.y + corner.height / 2;
+    // A restored window can already be at DSM's minimum width after an earlier run.
+    const grow = original.width <= 900;
+    const targetX = Math.min(original.outer.width - 16, x + (grow ? 180 : -230));
+    if (grow) assert.ok(targetX > x, "desktop needs room to grow a minimum-width window");
+    await page.mouse.move(x, y);
     await page.mouse.down();
-    await page.mouse.move(corner.x - 230, corner.y - 150, { steps: 12 });
+    await page.mouse.move(targetX, y, { steps: 12 });
     await page.mouse.up();
-    await expect.poll(() => shell.evaluate(() => innerWidth)).toBeLessThan(original.width);
-    const small = await geometry(shell, page);
+    const width = expect.poll(() => shell.evaluate(() => innerWidth), { timeout: 15_000 });
+    if (grow) await width.toBeGreaterThan(original.width);
+    else await width.toBeLessThan(original.width);
+    const resized = await geometry(shell, page);
     await scrollFixture(frame, page);
     await page.screenshot({ path: shot(`${engine.name()}-resized-scroll`) });
 
     const maximize = win.locator(".x-tool-maximize");
     await maximize.click();
-    await expect.poll(() => shell.evaluate(() => innerWidth)).toBeGreaterThan(small.width);
+    await expect.poll(() => shell.evaluate(() => innerWidth)).toBeGreaterThan(resized.width);
     await geometry(shell, page);
     await page.screenshot({ path: shot(`${engine.name()}-maximized`) });
-    await win.locator(".x-tool-restore").click();
-    await expect.poll(() => shell.evaluate(() => innerWidth)).toBe(small.width);
+    await restore.click({ timeout: 15_000 });
+    await expect.poll(() => shell.evaluate(() => innerWidth)).toBe(resized.width);
     await geometry(shell, page);
     await win.locator(".x-tool-close").click();
     await expect(win).toBeHidden();
