@@ -1,12 +1,12 @@
-// Run against an installed AirPlay Capture SPK in Virtual DSM.
+// Run against the installed nginx demo SPK in Virtual DSM.
 import assert from 'node:assert/strict';
 import { chromium, devices, expect, webkit } from '@playwright/test';
 import { HTTPS, OUTPUT, launch, logger, signIn, waitForApp } from './lib.mjs';
 
-const id = 'airplay-capture';
-const app = 'SYNO.SDS.AirplayCapture.Instance';
+const id = 'dsm-nginx-demo';
+const app = 'SYNO.SDS.DsmNginxDemo.Instance';
 const log = logger();
-const shot = (name) => `${OUTPUT}airplay-layout-${name}.png`;
+const shot = (name) => `${OUTPUT}layout-${name}.png`;
 const wrapper = `iframe[src*="/${id}/app.html"]`;
 
 async function geometry(shell, page) {
@@ -22,14 +22,11 @@ async function geometry(shell, page) {
   return metrics;
 }
 
-async function scrollSettings(frame, page, { wheel = true } = {}) {
-  await frame.getByRole('link', { name: 'Settings', exact: true }).click();
-  await expect(frame.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-  const section = frame.getByRole('button', { name: 'Updates', exact: true });
-  await section.click();
-  const heading = frame.getByRole('heading', { name: 'Updates', exact: true });
+async function scrollFixture(frame, page, { wheel = true } = {}) {
+  await frame.getByRole('link', { name: 'Jump to bottom' }).click();
+  const heading = frame.getByRole('heading', { name: 'End of fixture' });
   await expect(heading).toBeInViewport();
-  const shell = frame.locator('.app-header');
+  const shell = frame.locator('header');
   await expect(shell).toBeInViewport();
   const scrollTop = () => heading.evaluate(() => document.scrollingElement.scrollTop);
   const before = await scrollTop();
@@ -39,7 +36,7 @@ async function scrollSettings(frame, page, { wheel = true } = {}) {
     await page.mouse.move(x + width / 2, y + height / 2);
     await page.mouse.wheel(0, -760);
   } else {
-    await frame.getByRole('button', { name: 'Receiver', exact: true }).click();
+    await frame.getByRole('link', { name: 'Back to top' }).click();
   }
   await expect.poll(scrollTop).toBeLessThan(before);
   assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), 0);
@@ -55,7 +52,7 @@ for (const engine of [chromium, webkit]) {
     await waitForApp(page, id, log, `${engine.name()} open`);
     const win = page.locator('.x-window').filter({ has: page.locator(wrapper) }).first();
     const frame = page.frameLocator(wrapper).frameLocator('#frame');
-    const shell = frame.locator('.app-shell');
+    const shell = frame.locator('main');
     await expect(shell).toBeVisible();
     const original = await geometry(shell, page);
     await page.screenshot({ path: shot(`${engine.name()}-desktop`) });
@@ -69,7 +66,7 @@ for (const engine of [chromium, webkit]) {
     await page.mouse.up();
     await expect.poll(() => shell.evaluate(() => innerWidth)).toBeLessThan(original.width);
     const small = await geometry(shell, page);
-    await scrollSettings(frame, page);
+    await scrollFixture(frame, page);
     await page.screenshot({ path: shot(`${engine.name()}-resized-scroll`) });
 
     const maximize = win.locator('.x-tool-maximize');
@@ -99,11 +96,11 @@ if (process.argv.includes('--portal')) {
     const { page } = await signIn(browser, `${HTTPS}/${id}/`, undefined, devices['iPhone 15']);
     await waitForApp(page, id, log, 'iPhone portal');
     const frame = page.frameLocator(wrapper).frameLocator('#frame');
-    const shell = frame.locator('.app-shell');
+    const shell = frame.locator('main');
     await expect(shell).toBeVisible();
     const portrait = page.viewportSize();
     await geometry(shell, page);
-    await scrollSettings(frame, page, { wheel: false });
+    await scrollFixture(frame, page, { wheel: false });
     await page.screenshot({ path: shot('portal-portrait') });
     await page.setViewportSize({ width: portrait.height, height: portrait.width });
     await expect.poll(() => shell.evaluate(() => innerWidth)).toBeGreaterThan(portrait.width);

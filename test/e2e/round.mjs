@@ -21,6 +21,7 @@ function run(label, script, args, env = {}) {
 }
 
 run('install', 'install.mjs', spks);
+if (!results[0][1]) process.exit(1);
 log(`listeners: ${guest("netstat -ltnp 2>/dev/null | grep node | awk '{print $4}' | tr '\\n' ' '").trim()}`);
 for (const pkg of packages) {
   run(`window ${pkg.id}`, 'window.mjs', [pkg.id, pkg.app]);
@@ -32,6 +33,9 @@ run(`rights ${first.id} (HTTPS)`, 'rights.mjs', [first.id, first.app, ...pair], 
 run(`rights ${first.id} (HTTP)`, 'rights.mjs', [first.id, first.app], { DSM_URL: HTTP });
 for (const pkg of packages) {
   run(`portal ${pkg.id}`, 'portal.mjs', [pkg.id]);
+}
+if (packages.some(({ id }) => id === 'dsm-nginx-demo')) {
+  run('nginx demo layout', 'layout.mjs', ['--portal']);
 }
 
 log('=== summary');
