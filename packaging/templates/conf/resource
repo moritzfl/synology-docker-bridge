@@ -27,8 +27,8 @@
         {
           "type": "dsm",
           "relpath": "config/dsm.bridge.conf"
-        }
+        }{{webPortsResource}}
       ]
     }
-  }
+  }{{portConfigResource}}
 }

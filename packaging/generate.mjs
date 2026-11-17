@@ -241,6 +241,70 @@ function publicLocation(id, controlPort) {
 }
 
 /**
+ * Apps that must sit at the root of an address get ports of their own on DSM's nginx. TLS ends
+ * there with DSM's default certificate, which nginx applies to every server block; the bridge
+ * still checks every request.
+ */
+function webPortsServer(webPorts, controlPort) {
+  return [
+    "server {",
+    `    listen ${webPorts.http};`,
+    `    listen [::]:${webPorts.http};`,
+    `    listen ${webPorts.https} ssl;`,
+    `    listen [::]:${webPorts.https} ssl;`,
+    "    server_name _;",
+    "",
+    "    location / {",
+    "        proxy_set_header Host $http_host;",
+    "        proxy_set_header X-Real-IP $remote_addr;",
+    "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
+    "        proxy_set_header X-Forwarded-Proto $scheme;",
+    "        proxy_set_header Upgrade $http_upgrade;",
+    '        proxy_set_header Connection "upgrade";',
+    "        proxy_http_version 1.1;",
+    "        proxy_read_timeout 3600s;",
+    "        proxy_request_buffering off;",
+    "        proxy_intercept_errors off;",
+    `        proxy_pass http://127.0.0.1:${controlPort}/__proxy/;`,
+    "    }",
+    "}",
+    "",
+  ].join("\n");
+}
+
+/** Names the ports in DSM's firewall and port forwarding lists. */
+function webPortsServices(id, displayName, webPorts) {
+  return ["http", "https"]
+    .map((scheme) =>
+      [
+        `[${id}_${scheme}]`,
+        `title="${displayName} (${scheme.toUpperCase()})"`,
+        `dst.ports="${webPorts[scheme]}/tcp"`,
+        'port_forward="yes"',
+        `desc="${displayName}"`,
+        "",
+      ].join("\n"),
+    )
+    .join("\n");
+}
+
+const RESERVED_PORTS = [80, 443, 5000, 5001];
+
+function parseWebPorts(value) {
+  if (value === undefined) return null;
+  const ports = value && typeof value === "object" ? value : {};
+  const http = Number(ports.http);
+  const https = Number(ports.https);
+  for (const port of [http, https]) {
+    if (!Number.isInteger(port) || port < 1024 || port > 65535 || RESERVED_PORTS.includes(port)) {
+      throw new Error("webPorts needs http and https ports from 1024 to 65535, not DSM's own");
+    }
+  }
+  if (http === https) throw new Error("webPorts http and https must differ");
+  return { http, https };
+}
+
+/**
  * Files the package brings for an unmodified image, such as a settings file, mounted read-only
  * at the given container paths. Keys are container paths, values files next to the app config.
  */
@@ -443,6 +507,15 @@ export function resolve(raw, configDir) {
   config.controlPort = Number(config.controlPort || controlPortFor(id));
   config.ui = config.ui || {};
   config.files = parseFiles(config.files, config.appDir);
+  const webPorts = parseWebPorts(config.webPorts);
+  if (
+    webPorts &&
+    [config.internalPort, config.controlPort].some(
+      (port) => port === webPorts.http || port === webPorts.https,
+    )
+  ) {
+    throw new Error("webPorts must differ from internalPort and controlPort");
+  }
 
   // App paths that devices on the network fetch without a DSM session; see bridge/src/public.mjs.
   const publicPaths = config.publicPaths || [];
@@ -553,6 +626,29 @@ export function resolve(raw, configDir) {
     publicPaths: publicPaths.join(","),
     publicPrefix: publicPaths.length ? publicPrefix : "",
     publicLocation: publicPaths.length ? publicLocation(id, config.controlPort) : "",
+    // With ports of its own the app is at the root of another address on the same host. Cookies
+    // do not tell ports apart, so each package's session cookie gets its own name.
+    webPortsJson: scriptJson(webPorts),
+    ownOrigin: webPorts ? "true" : "false",
+    sessionCookie: webPorts ? `dsm_bridge_session_${id}` : "dsm_bridge_session",
+    webPortsServer: webPorts ? webPortsServer(webPorts, config.controlPort) : "",
+    webPortsServices: webPorts ? webPortsServices(id, displayName, webPorts) : "",
+    webPortsResource: webPorts
+      ? [
+          ",",
+          "        {",
+          '          "type": "server",',
+          '          "relpath": "config/server.bridge.conf",',
+          '          "ports": [',
+          `            { "port": ${webPorts.http}, "protocol": "tcp", "schema": "http" },`,
+          `            { "port": ${webPorts.https}, "protocol": "tcp", "schema": "https" }`,
+          "          ]",
+          "        }",
+        ].join("\n")
+      : "",
+    portConfigResource: webPorts
+      ? `,\n  "port-config": {\n    "protocol-file": "config/${id}.sc"\n  }`
+      : "",
     // An app running as the package user may read and write its own share; nothing else.
     dataSharePermission: JSON.stringify(packageUser(config) ? { rw: [id] } : {}),
     frameworkVersion: frameworkVersion(),
@@ -703,6 +799,15 @@ function assemblePackage(config, values, archInfo, options, stage) {
       path.join(payload, "config", `portal.${extension}`),
       path.join(payload, "config", `${id}.${extension}`),
     );
+  }
+  if (values.ownOrigin === "true") {
+    fs.renameSync(
+      path.join(payload, "config", "ports.sc"),
+      path.join(payload, "config", `${id}.sc`),
+    );
+  } else {
+    fs.rmSync(path.join(payload, "config", "ports.sc"));
+    fs.rmSync(path.join(payload, "config", "server.bridge.conf"));
   }
   fs.copyFileSync(path.join(payload, "compose.yml"), path.join(payload, "docker", "compose.yml"));
   fs.rmSync(path.join(payload, "compose.yml"));

@@ -8,9 +8,10 @@ import { promisify } from "node:util";
 import httpProxy from "http-proxy";
 import { createAuthenticator } from "./auth.mjs";
 import { loadConfig } from "./config.mjs";
-import { scopeCookies } from "./cookies.mjs";
+import { dropDsmCookies, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
 import { parseUser, probe } from "./access.mjs";
 import { publicTarget } from "./public.mjs";
+import { dsmAddress } from "./address.mjs";
 import { applyIdentity, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
@@ -96,7 +97,17 @@ function stripFrameHeaders(headers, prefix = "") {
 proxy.on("proxyRes", (proxyResponse, request) => {
   stripFrameHeaders(proxyResponse.headers, request._bridgePrefix || "");
   scopeCookies(proxyResponse.headers, request._bridgePrefix || "");
+  if (config.ownOrigin) {
+    const dropped = dropDsmCookies(proxyResponse.headers);
+    if (dropped.length) log("warn", "app cookies named like DSM's were dropped", { dropped });
+  }
 });
+
+/** The request's cookies the app may see: none of the bridge's, and none of DSM's. */
+function appCookies(header) {
+  const cookie = auth.stripCookies(header);
+  return config.ownOrigin ? withoutDsmCookies(cookie) : cookie;
+}
 
 // The bridge's own pages, in the browser's language. Inside the DSM window the wrapper shows the
 // real state instead, in the user's DSM language.
@@ -142,7 +153,7 @@ proxy.on("error", (error, request, response) => {
         // reloads the app when it answers; standalone tabs simply retry.
         script:
           "if (window.parent !== window) { parent.postMessage({ type: 'bridge:unavailable' }," +
-          " location.origin); } else { setTimeout(function () { location.reload(); }, 3000); }",
+          " '*'); } else { setTimeout(function () { location.reload(); }, 3000); }",
       }),
     );
   } else if (response && response.destroy) {
@@ -370,10 +381,13 @@ function redirectLocation(request) {
 }
 
 function unauthorized(response, request) {
-  // Requests arrive through DSM's own nginx, so Host already names DSM's address and port,
-  // whatever ports this NAS uses.
-  const host = String(request.headers.host || "") || "nas";
-  const login = `${isSecure(request) ? "https" : "http"}://${host}/`;
+  const login = dsmAddress(
+    String(request.headers.host || ""),
+    isSecure(request),
+    config.ownOrigin,
+    { http: config.dsmHttpPort, https: config.dsmHttpsPort },
+    config.appId,
+  );
   response.writeHead(401, {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store",
@@ -388,9 +402,14 @@ function unauthorized(response, request) {
         `<p><a href="${escapeHtml(login)}">${escapeHtml(pageText(request, "openDsm"))}</a></p>`,
       // Inside the DSM window the user is still signed in to DSM: ask the wrapper for a fresh
       // bridge session instead of showing this page (sessions end after idling or a restart).
+      // The message names no secret, and the window may be on another port than the app.
+      // Opened directly on the app's own ports, go to DSM, which opens the app after sign-in.
       script:
         "if (window.parent !== window) { document.body.style.visibility = 'hidden';" +
-        " parent.postMessage({ type: 'bridge:reauth' }, location.origin); }",
+        " parent.postMessage({ type: 'bridge:reauth' }, '*'); }" +
+        (config.ownOrigin
+          ? ` else { location.replace(${JSON.stringify(login).replace(/</g, "\\u003c")}); }`
+          : ""),
     }),
   );
 }
@@ -434,7 +453,7 @@ async function publicHandler(request, response) {
       return;
     }
     applyIdentity(request.headers, identity, config.identityHeaders, identitySecret);
-    const cookie = auth.stripCookies(request.headers.cookie);
+    const cookie = appCookies(request.headers.cookie);
     if (cookie) {
       request.headers.cookie = cookie;
     } else {
@@ -487,7 +506,7 @@ async function upgradeHandler(request, socket, head) {
       return;
     }
     applyIdentity(request.headers, identity, config.identityHeaders, identitySecret);
-    const cookie = auth.stripCookies(request.headers.cookie);
+    const cookie = appCookies(request.headers.cookie);
     if (cookie) {
       request.headers.cookie = cookie;
     } else {

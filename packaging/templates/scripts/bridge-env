@@ -8,6 +8,7 @@ ENV_FILE="$DEST/docker/.env"
 STATE_ENV="$VAR/app.env"
 TOKEN_FILE="$VAR/token"
 CONTROL_FILE="$VAR/bridge-port"
+NGINX_CONF="/etc/nginx/nginx.conf"
 
 valid_port() {
     case "${1:-}" in
@@ -75,12 +76,23 @@ public_url() {
     if [ -z "$address" ]; then
         address="$(ip -4 -o addr show scope global 2>/dev/null | grep -v docker | sed -n 's/.* inet \([0-9.]*\)\/.*/\1/p' | head -1)"
     fi
-    port="$(sed -n 's/^[[:space:]]*listen \([0-9]*\) default_server;$/\1/p' /etc/nginx/nginx.conf 2>/dev/null | head -1)"
+    port="$(sed -n 's/^[[:space:]]*listen \([0-9]*\) default_server;$/\1/p' "$NGINX_CONF" 2>/dev/null | head -1)"
     case "$address" in
         ''|*[!0-9.]*) return 0 ;;
     esac
     valid_port "$port" || port=5000
     printf 'http://%s:%s%s\n' "$address" "$port" "$prefix"
+}
+
+# DSM's own HTTP or HTTPS port, e.g. 5000 or 5001, for links from the app's own address back to DSM.
+dsm_port() {
+    case "$1" in
+        https) pattern='s/^[[:space:]]*listen \([0-9]*\) default_server ssl;$/\1/p'; port=5001 ;;
+        *) pattern='s/^[[:space:]]*listen \([0-9]*\) default_server;$/\1/p'; port=5000 ;;
+    esac
+    found="$(sed -n "$pattern" "$NGINX_CONF" 2>/dev/null | head -1)"
+    valid_port "$found" && port="$found"
+    printf '%s\n' "$port"
 }
 
 get_env() {
@@ -108,6 +120,8 @@ ensure_env() {
     set_env APP_DATA_DIR "{{dataDirDefault}}"
     set_env APP_TZ "$(host_timezone)"
     set_env APP_PUBLIC_URL "$(public_url)"
+    set_env DSM_HTTP_PORT "$(dsm_port http)"
+    set_env DSM_HTTPS_PORT "$(dsm_port https)"
     set_env APP_INTERNAL_PORT "${saved_internal:-{{hostPort}}}"
     set_env APP_CONTAINER_PORT "${saved_container_port:-{{containerPort}}}"
     set_env BRIDGE_CONTROL_PORT "$(cat "$CONTROL_FILE")"

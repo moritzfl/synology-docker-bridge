@@ -109,6 +109,16 @@
       "items": { "type": "string", "pattern": "^/[A-Za-z0-9._~/-]*$" },
       "description": "App paths that devices on the network may fetch without a DSM session, such as audio for speakers, served at /webman/3rdparty/<id>/public/ on DSM's ports. A trailing slash allows everything below it. The app learns the full address from APP_PUBLIC_URL."
     },
+    "webPorts": {
+      "type": "object",
+      "required": ["http", "https"],
+      "additionalProperties": false,
+      "properties": {
+        "http": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "https": { "type": "integer", "minimum": 1024, "maximum": 65535 }
+      },
+      "description": "For apps that only work at the root of an address: DSM's nginx serves the app on these ports of its own, with DSM's certificate, still behind the bridge's DSM sign-in. The desktop window and Login Portal open it there; the ports appear in DSM's firewall list."
+    },
     "files": {
       "type": "object",
       "propertyNames": { "pattern": "^/[A-Za-z0-9._/-]+$" },

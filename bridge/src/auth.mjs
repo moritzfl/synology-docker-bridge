@@ -17,6 +17,7 @@ export function createAuthenticator(config) {
   const oneTimeMs = Math.max(10, config.oneTimeSeconds) * 1000;
   const sessionMs = Math.max(60, config.sessionSeconds) * 1000;
   const verifyMs = Math.max(60, config.verifySeconds || 1800) * 1000;
+  const cookieName = config.sessionCookie || "dsm_bridge_session";
 
   function prune() {
     const now = Date.now();
@@ -40,7 +41,7 @@ export function createAuthenticator(config) {
     // Earlier versions set the cookie on Path=/, shared by every package; such a stale cookie
     // may arrive next to this package's own, so accept any value that is a live session.
     const now = Date.now();
-    for (const value of cookieValues(request.headers.cookie, "dsm_bridge_session")) {
+    for (const value of cookieValues(request.headers.cookie, cookieName)) {
       const entry = sessions.get(value);
       if (!entry) {
         continue;
@@ -66,8 +67,8 @@ export function createAuthenticator(config) {
       oneTime.set(token, {
         user: String(user),
         groups: Array.isArray(groups) ? groups.map(String) : [],
-        expiresAt: Date.now() + oneTimeMs,
         name: String(name || ""),
+        expiresAt: Date.now() + oneTimeMs,
       });
       return token;
     },
@@ -82,8 +83,8 @@ export function createAuthenticator(config) {
       sessions.set(session, {
         user: entry.user,
         groups: entry.groups,
-        expiresAt: now + sessionMs,
         name: entry.name,
+        expiresAt: now + sessionMs,
         verifiedUntil: now + verifyMs,
       });
       return session;
@@ -97,8 +98,8 @@ export function createAuthenticator(config) {
         return false;
       }
       session.groups = entry.groups;
-      session.verifiedUntil = Date.now() + verifyMs;
       session.name = entry.name;
+      session.verifiedUntil = Date.now() + verifyMs;
       return true;
     },
 
@@ -128,6 +129,7 @@ export function createAuthenticator(config) {
       return entry;
     },
 
+    /** Drops every bridge session cookie, also other packages' on the same host. */
     stripCookies(cookie) {
       if (!cookie) {
         return cookie;
@@ -135,16 +137,17 @@ export function createAuthenticator(config) {
       return cookie
         .split(";")
         .map((part) => part.trim())
-        .filter((part) => part && !part.startsWith("dsm_bridge_session="))
+        .filter((part) => part && !/^dsm_bridge_session(_[a-z0-9-]+)?=/.test(part))
         .join("; ");
     },
 
     cookie(session, secure = false, path = "/") {
       // A browser-session cookie: the bridge enforces the idle timeout, so the cookie must not
-      // expire on its own while the app is in use. The path keeps it to this package's proxy, so
-      // two packages open side by side never replace each other's session.
+      // expire on its own while the app is in use. The path (or, for an app at the root of its
+      // own ports, the name) keeps it to this package, so two packages open side by side never
+      // replace each other's session.
       return (
-        `dsm_bridge_session=${session}; Path=${path}; HttpOnly; SameSite=Lax` +
+        `${cookieName}=${session}; Path=${path}; HttpOnly; SameSite=Lax` +
         (secure ? "; Secure" : "")
       );
     },

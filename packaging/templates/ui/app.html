@@ -68,6 +68,14 @@
       document.documentElement.lang = LANG === "ger" ? "de" : "en";
       var generation = 0;
       var lastLogin = 0;
+      // Apps with ports of their own are at the root of another address on this host, on the
+      // port that matches how DSM was opened; the others are under this page's proxy path.
+      var OWN_PORTS = {{webPortsJson}};
+      var APP_ORIGIN = OWN_PORTS
+        ? location.protocol + "//" + location.hostname + ":"
+          + (location.protocol === "https:" ? OWN_PORTS.https : OWN_PORTS.http)
+        : location.origin;
+      var APP_BASE = OWN_PORTS ? APP_ORIGIN + "/" : "proxy/";
 
       function t(key, values) {
         var text = STRINGS[key] || TEXTS.enu[key] || key;
@@ -119,6 +127,9 @@
       }
 
       function explain(error) {
+        if (error && error.code === "unreachable") {
+          return t("unreachable", { port: APP_ORIGIN.split(":").pop() });
+        }
         var key = ERRORS[error && error.code];
         return key ? t(key) : t("unknownError");
       }
@@ -207,11 +218,24 @@
         });
       }
 
+      // On ports of its own the app is a separate address, which a firewall may block even
+      // though DSM itself is reachable. The bridge answers this ping to anyone.
+      function reachable() {
+        if (!OWN_PORTS) return Promise.resolve();
+        return fetch(APP_BASE + "__bridge_ping", { cache: "no-store" }).then(function () {}, function () {
+          var error = new Error("unreachable");
+          error.code = "unreachable";
+          throw error;
+        });
+      }
+
       function login(mine) {
         lastLogin = Date.now();
-        return api("session.cgi").then(function (session) {
+        return reachable().then(function () {
+          return api("session.cgi");
+        }).then(function (session) {
           if (mine !== generation) return;
-          els.frame.src = "proxy/__bridge_login?token=" + encodeURIComponent(session.token);
+          els.frame.src = APP_BASE + "__bridge_login?token=" + encodeURIComponent(session.token);
           els.frame.style.display = "block";
           els.state.style.display = "none";
           // The DSM window's title still names the state it last saw, such as "starting".
@@ -228,8 +252,13 @@
       setInterval(function () {
         if (els.frame.style.display !== "block") return;
         api("session.cgi").then(function (session) {
-          return fetch("proxy/__bridge_refresh?token=" + encodeURIComponent(session.token),
-            { cache: "no-store", credentials: "same-origin" });
+          // The answer is not needed, so the app's own address works without CORS; its cookie
+          // goes along because the two addresses are on the same site.
+          return fetch(APP_BASE + "__bridge_refresh?token=" + encodeURIComponent(session.token), {
+            cache: "no-store",
+            credentials: OWN_PORTS ? "include" : "same-origin",
+            mode: OWN_PORTS ? "no-cors" : "cors",
+          });
         }).catch(function (error) {
           if (error.code === "denied" || error.code === "auth") {
             generation++;
@@ -260,9 +289,9 @@
           });
       });
 
-      // Messages from the embedded app (same origin) and from the DSM window toolbar.
+      // Messages from the embedded app and from the DSM window toolbar.
       window.addEventListener("message", function (event) {
-        if (event.origin !== window.location.origin || !event.data) return;
+        if ((event.origin !== location.origin && event.origin !== APP_ORIGIN) || !event.data) return;
         var type = event.data.type;
         if (type === "bridge:reauth") {
           // The bridge session ended (idle timeout or a bridge restart). The user is still signed

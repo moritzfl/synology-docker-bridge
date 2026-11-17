@@ -131,6 +131,30 @@ test("revoking a user ends only that user's sessions", () => {
   assert.ok(auth.authenticate({ headers: { cookie: `dsm_bridge_session=${bob}` } }));
 });
 
+test("a package on ports of its own uses its own cookie name and never forwards another's", () => {
+  const auth = createAuthenticator(config({ sessionCookie: "dsm_bridge_session_fidus" }));
+  const session = auth.login(auth.mint("anna"));
+  assert.match(
+    auth.cookie(session, true),
+    /^dsm_bridge_session_fidus=[^;]+; Path=\/; HttpOnly; SameSite=Lax; Secure$/,
+  );
+  assert.equal(
+    auth.authenticate({ headers: { cookie: `dsm_bridge_session=${session}` } }),
+    null,
+    "only the package's own name counts",
+  );
+  assert.equal(
+    auth.authenticate({ headers: { cookie: `dsm_bridge_session_fidus=${session}` } }).user,
+    "anna",
+  );
+  assert.equal(
+    auth.stripCookies(
+      "dsm_bridge_session_fidus=a; dsm_bridge_session_other-app=b; dsm_bridge_session=c; app=1",
+    ),
+    "app=1",
+  );
+});
+
 test("the session carries the DSM full name and a refresh updates it", () => {
   const auth = createAuthenticator(config());
   const session = auth.login(auth.mint({ user: "anna", groups: ["users"], name: "Anna A" }));

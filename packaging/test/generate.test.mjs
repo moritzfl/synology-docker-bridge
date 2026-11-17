@@ -116,6 +116,61 @@ test("identity headers are off unless asked for", () => {
   );
 });
 
+test("apps that need the root of an address get ports of their own on DSM's nginx", () => {
+  const { read } = render({ ...minimal, webPorts: { http: 4386, https: 4387 } });
+  const resource = JSON.parse(read("conf/resource"));
+  const configs = resource["web-config"]["nginx-static-config"].enable;
+  assert.deepEqual(configs[1], {
+    type: "server",
+    relpath: "config/server.bridge.conf",
+    ports: [
+      { port: 4386, protocol: "tcp", schema: "http" },
+      { port: 4387, protocol: "tcp", schema: "https" },
+    ],
+  });
+  assert.deepEqual(resource["port-config"], { "protocol-file": "config/my-app.sc" });
+  const server = read("config/server.bridge.conf");
+  assert.match(server, /listen 4386;/);
+  assert.match(server, /listen \[::\]:4387 ssl;/);
+  assert.doesNotMatch(server, /ssl_certificate/, "DSM's default certificate applies");
+  assert.match(server, /proxy_pass http:\/\/127\.0\.0\.1:\d+\/__proxy\/;/);
+  assert.doesNotMatch(server, /X-Forwarded-Prefix/, "the app is at the root");
+  assert.match(
+    read("config/ports.sc"),
+    /\[my-app_https\]\ntitle="My App \(HTTPS\)"\ndst\.ports="4387\/tcp"/,
+  );
+  const compose = read("compose.yml");
+  assert.match(compose, /BRIDGE_OWN_ORIGIN: "true"/);
+  assert.match(compose, /BRIDGE_SESSION_COOKIE: "dsm_bridge_session_my-app"/);
+  assert.match(compose, /BRIDGE_APP_ID: "SYNO\.SDS\.MyApp\.Instance"/);
+  assert.match(read("ui/app.html"), /var OWN_PORTS = \{"http":4386,"https":4387\};/);
+
+  const plain = render(minimal);
+  const plainResource = JSON.parse(plain.read("conf/resource"));
+  assert.equal(plainResource["web-config"]["nginx-static-config"].enable.length, 1);
+  assert.equal(plainResource["port-config"], undefined);
+  assert.match(plain.read("compose.yml"), /BRIDGE_SESSION_COOKIE: "dsm_bridge_session"/);
+  assert.match(plain.read("ui/app.html"), /var OWN_PORTS = null;/);
+
+  for (const bad of [
+    { http: 4386 },
+    { http: 5000, https: 5002 },
+    { http: 80, https: 4387 },
+    { http: 7000, https: 7000 },
+    { http: 99, https: 100 },
+  ]) {
+    assert.throws(
+      () => resolve({ ...minimal, webPorts: bad }, here),
+      /webPorts/,
+      JSON.stringify(bad),
+    );
+  }
+  assert.throws(
+    () => resolve({ ...minimal, controlPort: 4387, webPorts: { http: 4386, https: 4387 } }, here),
+    /webPorts must differ/,
+  );
+});
+
 test("files the package brings are mounted read-only into the unmodified image", () => {
   const { read } = render({
     ...minimal,
@@ -156,6 +211,27 @@ test("a logo that is not square is centered on a square icon", () => {
     "64",
   ]);
   assert.deepEqual(squareIconArgs(100, 2).slice(-2), ["--top", "25"]);
+});
+
+test("DSM's own ports are read from its nginx config for the way back from the app's ports", () => {
+  const { target } = render(minimal);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-port-"));
+  const nginx = path.join(dir, "nginx.conf");
+  const script = path.join(target, "scripts", "bridge-env");
+  fs.writeFileSync(script, fs.readFileSync(script, "utf8").replace("/etc/nginx/nginx.conf", nginx));
+  const run = (scheme) =>
+    execFileSync("sh", ["-c", '. "$1"; dsm_port "$2"', "sh", script, scheme], {
+      encoding: "utf8",
+    }).trim();
+  assert.equal(run("http"), "5000", "defaults without a readable config");
+  assert.equal(run("https"), "5001");
+  fs.writeFileSync(
+    nginx,
+    "server {\n        listen 5080 default_server;\n        listen [::]:5080 default_server;\n}\n" +
+      "server {\n        listen 5443 default_server ssl;\n}\nserver {\n        listen 80 default_server;\n}\n",
+  );
+  assert.equal(run("http"), "5080");
+  assert.equal(run("https"), "5443");
 });
 
 test("as the package user, the app may use its own share and administrators get Folder access", () => {

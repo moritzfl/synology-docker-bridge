@@ -77,7 +77,8 @@
     "accessChecking": "Checking access…",
     "accessHint": "Permissions… opens DSM’s own permission settings. Allow {user} Read/Write there and save; this list checks again when you close them.",
     "accessManual": "Open Control Panel > Shared Folder, edit the shared folder of {path}, open Permissions, choose System internal user and allow {user} Read/Write. For a folder inside it, use File Station > Properties > Permission.",
-    "accessShareClosed": "No access to the shared folder {share}"
+    "accessShareClosed": "No access to the shared folder {share}",
+    "unreachable": "This computer cannot reach {app} on port {port}. If the DSM firewall is on, allow {app} in Control Panel > Security > Firewall."
   },
   "ger": {
     "opening": "{app} wird geöffnet",
@@ -157,6 +158,7 @@
     "accessChecking": "Zugriff wird geprüft…",
     "accessHint": "Berechtigungen… öffnet die Berechtigungseinstellungen von DSM. Erlauben Sie dort {user} Lesen/Schreiben und speichern Sie; beim Schließen wird erneut geprüft.",
     "accessManual": "Öffnen Sie Systemsteuerung > Gemeinsamer Ordner, bearbeiten Sie den gemeinsamen Ordner von {path}, öffnen Sie Berechtigungen, wählen Sie Systeminterner Benutzer und erlauben Sie {user} Lesen/Schreiben. Für einen Ordner darin: File Station > Eigenschaften > Berechtigung.",
-    "accessShareClosed": "Kein Zugriff auf den gemeinsamen Ordner {share}"
+    "accessShareClosed": "Kein Zugriff auf den gemeinsamen Ordner {share}",
+    "unreachable": "Dieser Computer erreicht {app} auf Port {port} nicht. Wenn die DSM-Firewall aktiv ist, erlauben Sie {app} unter Systemsteuerung > Sicherheit > Firewall."
   }
 }

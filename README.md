@@ -108,6 +108,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `displayNameGer`, `descriptionGer` | German name and Package Center description                                                                                                                                                                                                |
 | `allUsers`                         | `true`: every DSM user may open the app. Default `false`: administrators grant it                                                                                                                                                         |
 | `identityHeaders`                  | `true`: the app receives `Remote-User`, `Remote-Groups` and `Remote-Name` for the signed-in DSM user                                                                                                                                      |
+| `webPorts`                         | `{ "http": …, "https": … }` for apps that only work at the root of an address; see [Apps on ports of their own](#apps-on-ports-of-their-own)                                                                                              |
 | `files`                            | Files the package brings for an unmodified image, mounted read-only: `{ "/data/settings.py": "settings.py" }`                                                                                                                             |
 | `authMode`                         | `token` (default) or `none` for apps with their own sign-in                                                                                                                                                                               |
 
@@ -216,6 +217,27 @@ The same AirPlay Capture package through DSM Login Portal on an iPhone:
 For host-network apps, bind the app's web UI to `127.0.0.1`. Otherwise the internal port is
 reachable on the LAN and bypasses the bridge; other ports (RAOP, mDNS, DLNA) stay on the normal
 interfaces.
+
+## Apps on ports of their own
+
+Most web apps work under the package's path on DSM's address. Apps whose pages and scripts assume
+they sit at the root of an address (`/api/`, `/static/`, `/ws/`) do not, and the bridge does not
+rewrite page content. For them, `webPorts` gives the app an address of its own on DSM's web
+server, for example `https://<nas>:4387/`:
+
+- DSM's nginx listens on both ports with DSM's default certificate and forwards to the bridge, so
+  the bridge still checks every request and the app still has no port of its own on the network.
+- The desktop window, and Login Portal, open the app there, in the same window as always: HTTPS
+  when DSM was opened over HTTPS, HTTP otherwise. The session cookie is named after the package,
+  since cookies do not tell ports apart.
+- Opened directly, without a session, the address sends people to DSM, which opens the app's
+  window after sign-in. Bookmarks keep working.
+- The ports appear in DSM's firewall list under the app's name. When the firewall blocks them,
+  the window says so and names the port instead of showing an empty frame.
+- Browsers send DSM's sign-in cookies to every port of the NAS. The bridge removes them before
+  requests reach the app, and drops cookies the app tries to set under their names.
+- The app runs at the root of its address on the same host as DSM; script in it can still reach
+  DSM's web API from the user's browser, so the same trust applies as below.
 
 ## Paths without sign-in
 

@@ -58,5 +58,11 @@ export function loadConfig(env = process.env) {
     dataDir: env.BRIDGE_DATA_DIR || "",
     sharesDir: env.BRIDGE_SHARES_DIR || "",
     publicPaths: parsePublicPaths(env.BRIDGE_PUBLIC_PATHS),
+    // The app is at the root of an address of its own (webPorts) rather than under DSM's.
+    ownOrigin: env.BRIDGE_OWN_ORIGIN === "true",
+    sessionCookie: env.BRIDGE_SESSION_COOKIE || "dsm_bridge_session",
+    appId: env.BRIDGE_APP_ID || "",
+    dsmHttpPort: integer(env.BRIDGE_DSM_HTTP_PORT, 5000),
+    dsmHttpsPort: integer(env.BRIDGE_DSM_HTTPS_PORT, 5001),
   };
 }
