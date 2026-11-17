@@ -3,7 +3,7 @@ import test from "node:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { applyIdentity, ensureSecret } from "../src/identity.mjs";
+import { applyIdentity, dsmEmail, ensureSecret } from "../src/identity.mjs";
 
 test("passes the shared secret with the identity and drops a forged one", () => {
   const forged = { "X-Bridge-Secret": "guess" };
@@ -55,4 +55,27 @@ test("passes the DSM full name, and non-ASCII names as UTF-8 bytes", () => {
   const unnamed = {};
   applyIdentity(unnamed, { user: "anna", groups: [] }, true);
   assert.equal(unnamed["remote-name"], undefined);
+});
+
+test("finds a local DSM user's email in DSM's user database and passes it on", () => {
+  const db = "admin:0:\nanna:0:anna@example.com\nbob:0:not an address\neve:2:eve@example.org\n";
+  const read = () => db;
+  assert.equal(dsmEmail("anna", "/db", read), "anna@example.com");
+  assert.equal(dsmEmail("admin", "/db", read), "", "no address set");
+  assert.equal(dsmEmail("bob", "/db", read), "", "only real addresses");
+  assert.equal(dsmEmail("carol", "/db", read), "", "domain users are not in it");
+  assert.equal(dsmEmail("anna", "", read), "");
+  assert.equal(
+    dsmEmail("anna", "/db", () => {
+      throw new Error("EACCES");
+    }),
+    "",
+  );
+  const headers = { "remote-email": "forged@example.com" };
+  applyIdentity(headers, { user: "anna", groups: [], email: "anna@example.com" }, true);
+  assert.equal(headers["remote-email"], "anna@example.com");
+  const without = { "Remote-Email": "forged@example.com" };
+  applyIdentity(without, { user: "admin", groups: [] }, true);
+  assert.equal(without["Remote-Email"], undefined, "a forged address never gets through");
+  assert.equal(without["remote-email"], undefined);
 });

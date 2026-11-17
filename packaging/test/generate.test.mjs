@@ -109,7 +109,12 @@ test("the output share is declared, so DSM creates it when missing, and mounted 
 });
 
 test("identity headers are off unless asked for", () => {
-  assert.match(render(minimal).read("compose.yml"), /BRIDGE_IDENTITY_HEADERS: "false"/);
+  const plain = render(minimal).read("compose.yml");
+  assert.match(plain, /BRIDGE_IDENTITY_HEADERS: "false"/);
+  assert.doesNotMatch(plain, /host-etc/, "DSM's user database only when the app gets identities");
+  const identified = render({ ...minimal, identityHeaders: true }).read("compose.yml");
+  assert.match(identified, /^ {6}- \/etc:\/run\/host-etc:ro$/m);
+  assert.match(identified, /BRIDGE_USER_DB: "\/run\/host-etc\/synouser\.conf"/);
   assert.match(
     render({ ...minimal, identityHeaders: true }).read("compose.yml"),
     /BRIDGE_IDENTITY_HEADERS: "true"/,

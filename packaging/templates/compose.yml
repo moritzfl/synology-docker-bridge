@@ -49,6 +49,7 @@ services:
       BRIDGE_AUTH: "{{authMode}}"
       BRIDGE_OUTPUT: "{{showOutput}}"
       BRIDGE_IDENTITY_HEADERS: "{{identityHeaders}}"
+      BRIDGE_USER_DB: "{{userDbFile}}"
       BRIDGE_FRAMEWORK_VERSION: "{{frameworkVersion}}"
       BRIDGE_ONE_TIME_SECONDS: "{{oneTimeSeconds}}"
       BRIDGE_SESSION_SECONDS: "{{sessionSeconds}}"
@@ -70,3 +71,4 @@ services:
       - ${APP_DATA_DIR:-{{dataDirDefault}}}:/run/app-data
       - /var/packages/{{id}}/shares:/run/shares:ro
 {{bridgeOutputVolume}}
+{{bridgeUserDbVolume}}

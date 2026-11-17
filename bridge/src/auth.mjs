@@ -62,12 +62,14 @@ export function createAuthenticator(config) {
         user = "",
         groups = [],
         name = "",
+        email = "",
       } = typeof identity === "string" ? { user: identity } : identity || {};
       const token = crypto.randomBytes(24).toString("base64url");
       oneTime.set(token, {
         user: String(user),
         groups: Array.isArray(groups) ? groups.map(String) : [],
         name: String(name || ""),
+        email: String(email || ""),
         expiresAt: Date.now() + oneTimeMs,
       });
       return token;
@@ -84,6 +86,7 @@ export function createAuthenticator(config) {
         user: entry.user,
         groups: entry.groups,
         name: entry.name,
+        email: entry.email,
         expiresAt: now + sessionMs,
         verifiedUntil: now + verifyMs,
       });
@@ -99,6 +102,7 @@ export function createAuthenticator(config) {
       }
       session.groups = entry.groups;
       session.name = entry.name;
+      session.email = entry.email;
       session.verifiedUntil = Date.now() + verifyMs;
       return true;
     },

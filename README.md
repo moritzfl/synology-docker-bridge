@@ -107,7 +107,7 @@ Everything else has a default; `app.schema.json` documents every field. The ones
 | `outputLabel`                      | What the folder is called, as text or `{ "enu": …, "ger": … }`                                                                                                                                                                            |
 | `displayNameGer`, `descriptionGer` | German name and Package Center description                                                                                                                                                                                                |
 | `allUsers`                         | `true`: every DSM user may open the app. Default `false`: administrators grant it                                                                                                                                                         |
-| `identityHeaders`                  | `true`: the app receives `Remote-User`, `Remote-Groups` and `Remote-Name` for the signed-in DSM user                                                                                                                                      |
+| `identityHeaders`                  | `true`: the app receives `Remote-User`, `Remote-Groups`, `Remote-Name` and `Remote-Email` for the signed-in DSM user                                                                                                                      |
 | `webPorts`                         | `{ "http": …, "https": … }` for apps that only work at the root of an address; see [Apps on ports of their own](#apps-on-ports-of-their-own)                                                                                              |
 | `files`                            | Files the package brings for an unmodified image, mounted read-only: `{ "/data/settings.py": "settings.py" }`                                                                                                                             |
 | `publicCookies`                    | The app's cookies visitors without a session keep on `publicPaths`, e.g. `["csrftoken"]`                                                                                                                                                  |
@@ -204,10 +204,14 @@ The same AirPlay Capture package through DSM Login Portal on an iPhone:
   land on DSM's own pages.
 - With `identityHeaders: true`, every request reaches the app with `Remote-User: <DSM user>`,
   `Remote-Groups: <groups>` (comma-separated; administrators are in `administrators`) and, when the
-  DSM account has one, `Remote-Name: <full name>`, the convention of Authelia and oauth2-proxy, so
-  the app can show per-user data or admin-only features without a second sign-in. Names that are
-  not ASCII arrive as their UTF-8 bytes. The bridge always removes these headers
-  from what the browser sends, so the app can trust them.
+  DSM account has them, `Remote-Name: <full name>` and `Remote-Email: <address>`, the convention of
+  Authelia and oauth2-proxy, so the app can show per-user data or admin-only features without a
+  second sign-in. Names that are not ASCII arrive as their UTF-8 bytes. The bridge always removes
+  these headers from what the browser sends, so the app can trust them.
+- The address is the one set for a local DSM user in Control Panel or Personal. Only root can read
+  DSM's user database, so the bridge does, through a read-only mount of `/etc` (DSM replaces the
+  file on every change, which a mount of the file alone would miss). Domain and LDAP users have
+  no address there.
 - The app's port is on localhost, where any other process on the NAS, including containers with
   host networking, could send `Remote-User` itself. The bridge therefore also sends
   `X-Bridge-Secret`, a random value it keeps in the app's data folder as `/data/.bridge-secret`,
@@ -299,7 +303,7 @@ malicious or compromised image could change DSM settings with an administrator's
 package images you trust, and keep them updated like DSM itself.
 
 The bridge container runs as root with the Docker socket; treat it as a privileged local
-component. Its control API binds `127.0.0.1` only and requires a bearer token from
+component. With `identityHeaders`, it also reads `/etc` (read-only) for DSM's user database. Its control API binds `127.0.0.1` only and requires a bearer token from
 `/var/packages/<id>/var/token`.
 
 ## What the bridge does

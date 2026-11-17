@@ -53,6 +53,8 @@ export function loadConfig(env = process.env) {
     sessionSeconds: integer(env.BRIDGE_SESSION_SECONDS, 28800),
     verifySeconds: integer(env.BRIDGE_VERIFY_SECONDS, 1800),
     identityHeaders: env.BRIDGE_IDENTITY_HEADERS === "true",
+    // DSM's user database, for the email addresses of local DSM users.
+    userDbFile: env.BRIDGE_USER_DB || "",
     frameworkVersion: env.BRIDGE_FRAMEWORK_VERSION || "",
     // The app's data folder as the bridge sees it, and DSM's links to the package's shares.
     dataDir: env.BRIDGE_DATA_DIR || "",

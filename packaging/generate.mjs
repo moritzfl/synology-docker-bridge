@@ -611,6 +611,9 @@ export function resolve(raw, configDir) {
     authMode,
     showOutput: showOutput ? "true" : "false",
     identityHeaders: config.identityHeaders === true ? "true" : "false",
+    // DSM replaces its user database on every change, so the directory is mounted, read-only.
+    userDbFile: config.identityHeaders === true ? "/run/host-etc/synouser.conf" : "",
+    bridgeUserDbVolume: config.identityHeaders === true ? "      - /etc:/run/host-etc:ro" : "",
     outputLabelJson: scriptJson(outputLabel),
     texts: scriptJson(JSON.parse(fs.readFileSync(path.join(here, "texts.json"), "utf8"))),
     displayNameGer,

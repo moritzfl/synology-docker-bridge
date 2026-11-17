@@ -163,3 +163,12 @@ test("the session carries the DSM full name and a refresh updates it", () => {
   assert.ok(auth.refresh(request, auth.mint({ user: "anna", groups: ["users"], name: "Anna B" })));
   assert.equal(auth.authenticate(request).name, "Anna B");
 });
+
+test("the session carries the DSM email address", () => {
+  const auth = createAuthenticator(config());
+  const session = auth.login(auth.mint({ user: "anna", email: "anna@example.com" }));
+  const request = { headers: { cookie: `dsm_bridge_session=${session}` } };
+  assert.equal(auth.authenticate(request).email, "anna@example.com");
+  assert.ok(auth.refresh(request, auth.mint({ user: "anna", email: "anna@example.org" })));
+  assert.equal(auth.authenticate(request).email, "anna@example.org");
+});

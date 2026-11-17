@@ -12,7 +12,7 @@ import { dropDsmCookies, onlyCookies, scopeCookies, withoutDsmCookies } from "./
 import { parseUser, probe } from "./access.mjs";
 import { publicTarget } from "./public.mjs";
 import { dsmAddress } from "./address.mjs";
-import { applyIdentity, ensureSecret } from "./identity.mjs";
+import { applyIdentity, dsmEmail, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
 import { pruneSuperseded } from "./images.mjs";
@@ -781,7 +781,12 @@ async function handleControl(request, response) {
   if (request.method === "POST" && url.pathname === "/session") {
     const body = await readJson(request);
     sendJson(response, 200, {
-      token: auth.mint({ user: body.user, groups: body.groups, name: body.name }),
+      token: auth.mint({
+        user: body.user,
+        groups: body.groups,
+        name: body.name,
+        email: config.identityHeaders ? dsmEmail(String(body.user || ""), config.userDbFile) : "",
+      }),
     });
     return;
   }
