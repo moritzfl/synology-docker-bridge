@@ -63,10 +63,45 @@ for (const engine of [chromium, webkit]) {
     const frame = page.frameLocator(wrapper).frameLocator("#frame");
     const shell = frame.locator("main");
     await expect(shell).toBeVisible();
+    const offer = page.locator('[syno-id="promotion-app-window"]');
+    const adaptiveMfa = offer.getByText("Protect your account with Adaptive MFA", { exact: true });
+    const assertOnboardingComplete = async () => {
+      if (await adaptiveMfa.isVisible()) {
+        throw new Error(
+          "Finish Adaptive MFA enrollment in the DSM test account before running layout tests.",
+        );
+      }
+    };
+    const decline = offer.getByRole("button", { name: "No, thanks", exact: true });
+    await assertOnboardingComplete();
+    if (
+      await decline.waitFor({ timeout: 3000 }).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      await decline.click();
+      // DSM can show a second onboarding card in the same window. Defer 2FA enrollment
+      // for this run without changing account security settings.
+      const later = offer.getByRole("button", { name: "Remind me later", exact: true });
+      if (
+        await later.waitFor({ timeout: 10_000 }).then(
+          () => true,
+          () => false,
+        )
+      ) {
+        await later.click();
+      }
+      await offer.waitFor({ state: "hidden", timeout: 30_000 }).catch(async (error) => {
+        await assertOnboardingComplete();
+        throw error;
+      });
+    }
     const original = await geometry(shell, page);
     await page.screenshot({ path: shot(`${engine.name()}-desktop`) });
 
     const handle = win.locator(".x-resizable-handle-southeast").first();
+    await handle.hover();
     const corner = await handle.boundingBox();
     assert.ok(corner, "DSM window must expose its resize handle");
     await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
