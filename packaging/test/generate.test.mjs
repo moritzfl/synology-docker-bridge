@@ -6,7 +6,15 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
-import { buildApp, dsmNameFor, publishPackage, renderTemplates, resolve } from "../generate.mjs";
+import {
+  buildApp,
+  dsmNameFor,
+  publishPackage,
+  renderTemplates,
+  resolve,
+  squareIconArgs,
+  svgAspect,
+} from "../generate.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packaging = path.dirname(here);
@@ -106,6 +114,25 @@ test("identity headers are off unless asked for", () => {
     render({ ...minimal, identityHeaders: true }).read("compose.yml"),
     /BRIDGE_IDENTITY_HEADERS: "true"/,
   );
+});
+
+test("a logo that is not square is centered on a square icon", () => {
+  assert.equal(
+    svgAspect('<svg width="41.8pt" height="50.6pt" viewBox="0 0 41.8 50.6">'),
+    41.8 / 50.6,
+  );
+  assert.equal(svgAspect('<?xml version="1.0"?>\n<svg\n  width="200" height="100">'), 2);
+  assert.equal(svgAspect("<svg>"), 1);
+  assert.deepEqual(squareIconArgs(64, 1), ["-a", "-w", "64", "-h", "64"]);
+  assert.deepEqual(squareIconArgs(256, 0.5).slice(5), [
+    "--page-width",
+    "256",
+    "--page-height",
+    "256",
+    "--left",
+    "64",
+  ]);
+  assert.deepEqual(squareIconArgs(100, 2).slice(-2), ["--top", "25"]);
 });
 
 test("as the package user, the app may use its own share and administrators get Folder access", () => {

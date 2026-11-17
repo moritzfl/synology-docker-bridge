@@ -80,6 +80,37 @@ function copyTree(source, target, values) {
 
 const APP_ICON_SIZES = [16, 24, 32, 48, 64, 72, 256];
 
+/** Width / height of an SVG from its viewBox, else its width and height; 1 when unknown. */
+export function svgAspect(text) {
+  const root = /<svg\b[^>]*>/i.exec(text)?.[0] || "";
+  const attribute = (name) =>
+    new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, "i").exec(root)?.[1];
+  const box = (attribute("viewBox") || "")
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  if (box.length === 4 && box[2] > 0 && box[3] > 0) return box[2] / box[3];
+  const width = parseFloat(attribute("width"));
+  const height = parseFloat(attribute("height"));
+  return width > 0 && height > 0 ? width / height : 1;
+}
+
+/** rsvg-convert arguments that draw the SVG centered on a square of `size` pixels. */
+export function squareIconArgs(size, aspect) {
+  const args = ["-a", "-w", String(size), "-h", String(size)];
+  if (Math.abs(aspect - 1) < 0.001) return args;
+  const offset = String(Math.round((size * (1 - Math.min(aspect, 1 / aspect))) / 2));
+  return [
+    ...args,
+    "--page-width",
+    String(size),
+    "--page-height",
+    String(size),
+    aspect < 1 ? "--left" : "--top",
+    offset,
+  ];
+}
+
 /**
  * Icons from one SVG (`icon`), drawn at every size DSM asks for, or from a folder of ready-made
  * PNGs (`icons`) with app_{16,24,32,48,64,72,256}.png and PACKAGE_ICON*.PNG.
@@ -90,8 +121,10 @@ function copyIcons(config, target) {
   if (config.icon) {
     const svg = path.resolve(config.appDir, config.icon);
     if (!fs.existsSync(svg)) throw new Error(`missing icon: ${svg}`);
+    // A logo that is not square is centered rather than stretched.
+    const aspect = svgAspect(fs.readFileSync(svg, "utf8"));
     const draw = (size, file) =>
-      execFileSync("rsvg-convert", ["-w", String(size), "-h", String(size), "-o", file, svg]);
+      execFileSync("rsvg-convert", [...squareIconArgs(size, aspect), "-o", file, svg]);
     try {
       for (const size of APP_ICON_SIZES) draw(size, path.join(images, `app_${size}.png`));
     } catch (error) {
