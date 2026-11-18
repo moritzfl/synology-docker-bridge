@@ -25,6 +25,8 @@ const config = loadConfig();
 const docker = createDocker({ socketPath: config.dockerSocket });
 const inspectContainer = (name) => docker.inspect(name);
 const auth = createAuthenticator(config);
+// A WebSocket that no HTTP request follows still has to end when its session does.
+setInterval(() => auth.sweep(), 60_000).unref();
 
 if (!config.token) {
   console.error("bridge token missing; set BRIDGE_TOKEN or BRIDGE_TOKEN_FILE");
@@ -583,6 +585,8 @@ async function upgradeHandler(request, socket, head) {
     } else {
       delete request.headers.cookie;
     }
+    const untrack = auth.track(identity.key, () => socket.destroy());
+    socket.once("close", untrack);
     delete request.headers["x-forwarded-prefix"];
     proxy.ws(request, socket, head);
   } catch (error) {

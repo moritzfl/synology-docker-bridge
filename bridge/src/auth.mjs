@@ -25,8 +25,19 @@ export function createAuthenticator(config) {
       if (value.expiresAt <= now) oneTime.delete(key);
     }
     for (const [key, value] of sessions) {
-      if (value.expiresAt <= now || value.verifiedUntil <= now) sessions.delete(key);
+      if (value.expiresAt <= now || value.verifiedUntil <= now) {
+        closeSockets(value);
+        sessions.delete(key);
+      }
     }
+  }
+
+  /** Ends the open WebSockets of a session; they authenticated only when they were opened. */
+  function closeSockets(entry) {
+    for (const close of entry.sockets) {
+      close();
+    }
+    entry.sockets.clear();
   }
 
   function take(token) {
@@ -47,9 +58,11 @@ export function createAuthenticator(config) {
         continue;
       }
       if (entry.expiresAt <= now || entry.verifiedUntil <= now) {
+        closeSockets(entry);
         sessions.delete(value);
         continue;
       }
+      entry.key = value;
       return entry;
     }
     return null;
@@ -89,8 +102,28 @@ export function createAuthenticator(config) {
         email: entry.email,
         expiresAt: now + sessionMs,
         verifiedUntil: now + verifyMs,
+        sockets: new Set(),
       });
       return session;
+    },
+
+    /** Registers how to end a WebSocket of the session; returns a function that removes it again. */
+    track(key, close) {
+      if (!key) {
+        return () => {};
+      }
+      const entry = sessions.get(key);
+      if (!entry) {
+        close();
+        return () => {};
+      }
+      entry.sockets.add(close);
+      return () => entry.sockets.delete(close);
+    },
+
+    /** Ends sessions whose last privilege check or activity is too old, and their sockets. */
+    sweep() {
+      prune();
     },
 
     /** Renews the request's session with a fresh one-time token for the same user. */
@@ -112,9 +145,14 @@ export function createAuthenticator(config) {
       let count = 0;
       for (const [key, value] of sessions) {
         if (value.user === user) {
+          closeSockets(value);
           sessions.delete(key);
           count++;
         }
+      }
+      // A token minted a moment earlier must not become a session after the privilege is gone.
+      for (const [key, value] of oneTime) {
+        if (value.user === user) oneTime.delete(key);
       }
       return count;
     },

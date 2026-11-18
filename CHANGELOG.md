@@ -24,6 +24,8 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
   names, so the root bridge cannot be pointed at another file.
 - The control token no longer appears in the arguments of the CGIs' `curl` calls, where any local
   user could read it from `/proc`; it is passed on stdin.
+- Revoking a user's access also closes that user's open WebSockets and discards one-time tokens
+  that were not redeemed yet, so a removed privilege takes effect at once.
 
 ## [0.3.0] - 2026-11-18
 

@@ -131,6 +131,49 @@ test("revoking a user ends only that user's sessions", () => {
   assert.ok(auth.authenticate({ headers: { cookie: `dsm_bridge_session=${bob}` } }));
 });
 
+test("revoking a user also ends their sockets and unredeemed tokens", () => {
+  const auth = createAuthenticator(config());
+  const session = auth.login(auth.mint("anna"));
+  const identity = auth.authenticate({
+    headers: { cookie: `dsm_bridge_session=${session}` },
+  });
+  const closed = [];
+  const untrack = auth.track(identity.key, () => closed.push("socket"));
+  const pending = auth.mint("anna");
+  const bobsPending = auth.mint("bob");
+  assert.equal(auth.revoke("anna"), 1);
+  assert.deepEqual(closed, ["socket"], "the open socket is closed at once");
+  assert.equal(auth.login(pending), null, "a token minted before revocation is gone");
+  assert.ok(auth.login(bobsPending), "another user's token still works");
+  untrack();
+});
+
+test("an expired session closes its socket without another request", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: 0 });
+  const auth = createAuthenticator(config({ sessionSeconds: 3600, verifySeconds: 600 }));
+  const session = auth.login(auth.mint("anna"));
+  const identity = auth.authenticate({
+    headers: { cookie: `dsm_bridge_session=${session}` },
+  });
+  let closed = false;
+  auth.track(identity.key, () => {
+    closed = true;
+  });
+  t.mock.timers.tick(601_000);
+  auth.sweep();
+  assert.equal(closed, true);
+});
+
+test("none mode allows websockets without a session to track", () => {
+  const auth = createAuthenticator(config({ authMode: "none" }));
+  const identity = auth.authenticate({ headers: {} });
+  let closed = false;
+  auth.track(identity.key, () => {
+    closed = true;
+  });
+  assert.equal(closed, false);
+});
+
 test("a package on ports of its own uses its own cookie name and never forwards another's", () => {
   const auth = createAuthenticator(config({ sessionCookie: "dsm_bridge_session_fidus" }));
   const session = auth.login(auth.mint("anna"));
