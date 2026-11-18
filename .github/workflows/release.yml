@@ -1,0 +1,58 @@
+name: Release
+
+# Pushing a version tag (e.g. 0.3.0) checks it against bridge/package.json and CHANGELOG.md, runs
+# CI, and creates a GitHub Release with that version's changelog section as notes.
+on:
+  push:
+    tags: ["*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # Fails before anything is published when the tag, the version or the notes do not match.
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Validate version and release notes
+        run: |
+          version=$(node -p 'require("./bridge/package.json").version')
+          locked=$(node -p 'require("./bridge/package-lock.json").version')
+          if [[ ! "$GITHUB_REF_NAME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ || "$version" != "$GITHUB_REF_NAME" || "$locked" != "$GITHUB_REF_NAME" ]]; then
+            echo "Release tag must be X.Y.Z and match bridge/package.json and its lockfile (found '$version', '$locked')." >&2
+            exit 1
+          fi
+          node scripts/changelog-section.mjs "$GITHUB_REF_NAME"
+
+  test:
+    needs: changelog
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          {
+            node scripts/changelog-section.mjs "$GITHUB_REF_NAME"
+            echo
+            echo "## Use"
+            echo
+            echo "Build packages with this release by checking out the tag \`$GITHUB_REF_NAME\`, for example \`git clone --branch $GITHUB_REF_NAME https://github.com/$GITHUB_REPOSITORY.git\`, or \`ref: $GITHUB_REF_NAME\` with \`actions/checkout\` in a workflow. Then run \`node synology-docker-bridge/packaging/generate.mjs --config app.json\`; the README describes the app configuration."
+          } > release-notes.md
+
+      - name: Create the GitHub Release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
+        with:
+          name: synology-docker-bridge ${{ github.ref_name }}
+          body_path: release-notes.md

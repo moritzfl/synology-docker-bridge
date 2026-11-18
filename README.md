@@ -50,6 +50,7 @@ the bridge's.
 | `packaging/test/`, `bridge/test/` | Unit tests (`npm test`)                                                                 |
 | `test/e2e/`                       | Installs real SPKs in Virtual DSM and drives their windows; see its README              |
 | `examples/nginx/`                 | Demo: nginx plus a `/whoami` page that shows the identity headers                       |
+| `CHANGELOG.md`                    | Changes per release; `scripts/changelog-section.mjs` prints one as release notes        |
 
 ## Quick start
 
@@ -416,6 +417,29 @@ Virtual DSM 7.2.2 uses Linux 4.4.
 Dependency updates are configured in `renovate.json` for npm packages, Docker images, and GitHub
 Actions. Give the [Mend Renovate GitHub App](https://github.com/apps/renovate) access to this
 repository to receive update PRs. Updates are not merged automatically.
+
+## Releases
+
+Versions follow [Semantic Versioning](https://semver.org/). The version is in
+`bridge/package.json`, and `CHANGELOG.md` collects user-visible changes under `## [Unreleased]` as
+they land. `node scripts/changelog-section.mjs <version>` prints the notes a release will get.
+
+To release `X.Y.Z`:
+
+1. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - <date>`, add an empty
+   `## [Unreleased]` above it, and update the links at the bottom.
+2. `(cd bridge && npm version X.Y.Z --no-git-tag-version)` sets the version in `package.json` and
+   `package-lock.json`.
+3. Commit `chore(release): X.Y.Z`, tag that commit `X.Y.Z` (no `v` prefix), and push both
+   together: `git push --atomic origin main refs/tags/X.Y.Z`.
+
+The tag starts `.github/workflows/release.yml`: it checks that the tag matches the version and has
+a changelog section, runs CI, and creates the GitHub Release with that section as its notes. It
+uses the workflow's own token, so no secrets are needed.
+
+Packages built with the bridge pin a release, for example with `ref: X.Y.Z` where their release
+workflow checks out this repository, and move to a new one once they have tested it. The bridge
+logs the version it was built from at startup (`framework`, e.g. `0.3.0+<commit>`).
 
 ## License
 
