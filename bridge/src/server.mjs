@@ -182,9 +182,12 @@ const PAGE_TEXTS = {
   },
 };
 
+function pageLanguage(request) {
+  return /^de\b/i.test(String(request.headers["accept-language"] || "")) ? "de" : "en";
+}
+
 function pageText(request, key) {
-  const language = /^de\b/i.test(String(request.headers["accept-language"] || "")) ? "de" : "en";
-  return PAGE_TEXTS[language][key].replace("{app}", config.appTitle);
+  return PAGE_TEXTS[pageLanguage(request)][key].replace("{app}", config.appTitle);
 }
 
 proxy.on("error", (error, request, response) => {
@@ -196,6 +199,7 @@ proxy.on("error", (error, request, response) => {
     });
     response.end(
       page({
+        language: pageLanguage(request),
         title: pageText(request, "starting"),
         heading: pageText(request, "starting"),
         body: `<p>${escapeHtml(pageText(request, "notAnswering"))}</p>`,
@@ -215,9 +219,9 @@ proxy.on("error", (error, request, response) => {
  * Neutral page for the bridge's own responses. It must not carry any app branding: the bridge
  * serves every packaged app the same way.
  */
-function page({ title, heading, body, script = "" }) {
+function page({ language, title, heading, body, script = "" }) {
   return `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>${escapeHtml(title)}</title>
 <style>
 :root{color-scheme:light}
@@ -446,6 +450,7 @@ function unauthorized(response, request) {
   });
   response.end(
     page({
+      language: pageLanguage(request),
       title: pageText(request, "signInTitle"),
       heading: pageText(request, "signIn"),
       body:

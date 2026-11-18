@@ -15,6 +15,11 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
   phones can show the app without that header. Added to the Home Screen, the tab opens like an
   app, with the app's name and icon.
 
+### Fixed
+
+- The bridge's own pages (the app is starting, sign-in required) declare their language, so
+  screen readers read the German pages in German.
+
 ## [0.3.0] - 2026-11-18
 
 ### Added
