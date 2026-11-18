@@ -47,6 +47,7 @@ the bridge's.
 | `packaging/app.schema.json`       | JSON schema for app configs (editor completion and checks)                              |
 | `packaging/texts.json`            | Every text the window shows, in English and German                                      |
 | `packaging/templates/`            | SPK template: INFO, compose, scripts, DSM AppWindow, CGI, nginx and Login Portal config |
+| `packaging/dsm-globals.d.ts`      | DSM's globals (`Ext`, `SYNO`, `_S`) for editors; not packaged                           |
 | `packaging/test/`, `bridge/test/` | Unit tests (`npm test`)                                                                 |
 | `test/e2e/`                       | Installs real SPKs in Virtual DSM and drives their windows; see its README              |
 | `examples/nginx/`                 | Demo: nginx plus a `/whoami` page that shows the identity headers                       |
