@@ -196,9 +196,11 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
       path: "conf/app.yaml",
       check: ["check", "--file", "{file}"],
       ready: ["probe", "--json"],
+      timeout: 1800,
     },
   });
   const compose = read("compose.yml");
+  assert.match(compose, /BRIDGE_CONFIG_TIMEOUT_SECONDS: "1800"/);
   assert.match(compose, /BRIDGE_CONFIG_FILE: "conf\/app\.yaml"/);
   const check = /BRIDGE_CONFIG_CHECK: (.*)$/m.exec(compose)[1];
   assert.deepEqual(JSON.parse(JSON.parse(check)), ["check", "--file", "{file}"]);
@@ -219,6 +221,13 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
 
   const plain = render({ ...minimal, configFile: "settings.json" });
   assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_CHECK: "\[\]"/);
+  assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_TIMEOUT_SECONDS: "600"/, "10 minutes");
+  for (const timeout of [30, 7201, "1800", 90.5]) {
+    assert.throws(
+      () => resolve({ ...minimal, configFile: { path: "settings.json", timeout } }, here),
+      /configFile timeout/,
+    );
+  }
   const none = render(minimal);
   assert.match(none.read("compose.yml"), /BRIDGE_CONFIG_FILE: ""/);
   assert.match(none.read("ui/bridge.js"), /var CONFIG_LABEL = null;/);

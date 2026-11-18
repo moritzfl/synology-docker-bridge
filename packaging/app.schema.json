@@ -155,6 +155,12 @@
               "items": { "type": "string", "minLength": 1 },
               "description": "Command run in the app's container after the restart that succeeds only once the app is really up, for apps that answer with a maintenance page while they set up. Default: any answer from the app."
             },
+            "timeout": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 7200,
+              "description": "Seconds the app may take to be up after the restart before the previous file comes back. Default 600; raise it for apps that rebuild themselves when their settings change, which takes longest on slow NAS models."
+            },
             "label": {
               "description": "Name of the menu item and dialog; default Settings.",
               "oneOf": [{ "$ref": "#/$defs/plainText" }, { "type": "object" }]

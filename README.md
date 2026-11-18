@@ -262,7 +262,9 @@ app unusable:
 - **Restart and watch**: the saved file takes effect when the app restarts. The window shows the
   restart, and the bridge watches the app: it must be up and stay up for 30 seconds in the same
   container. Up means it answers, or, with `configFile.ready`, that this command succeeds in the
-  app's container, for apps that show a maintenance page while they set up.
+  app's container, for apps that show a maintenance page while they set up. The app has 10
+  minutes to get there; `configFile.timeout` gives apps that rebuild themselves on a settings
+  change more, in seconds.
 - **Undo**: if it does not, the bridge puts the previous file back and restarts the app again. The
   editor reopens with the administrator's text and what the app logged, so it can be fixed.
   The bridge keeps the previous file with the package until then, so a restart of the bridge or

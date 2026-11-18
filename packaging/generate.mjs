@@ -363,13 +363,15 @@ function composeValue(value) {
 /**
  * The settings file administrators edit in the window: a path in the data folder, a command that
  * checks a candidate before it is applied ({file} is its path in the container), a command that
- * succeeds once the app is really up after the restart, and a name.
+ * succeeds once the app is really up after the restart, how long that may take, and a name.
  */
 function parseConfigFile(value) {
   if (value === undefined) return null;
   const config = typeof value === "string" ? { path: value } : value;
   if (!config || typeof config !== "object" || Array.isArray(config)) {
-    throw new Error("configFile must be a path in the data folder or { path, check, label }");
+    throw new Error(
+      "configFile must be a path in the data folder or { path, check, ready, timeout, label }",
+    );
   }
   const file = String(config.path || "");
   if (
@@ -380,6 +382,10 @@ function parseConfigFile(value) {
   }
   const check = config.check === undefined ? [] : stringList(config.check, "configFile check");
   const ready = config.ready === undefined ? [] : stringList(config.ready, "configFile ready");
+  const timeout = config.timeout === undefined ? 600 : config.timeout;
+  if (!Number.isInteger(timeout) || timeout < 60 || timeout > 7200) {
+    throw new Error("configFile timeout must be whole seconds from 60 to 7200");
+  }
   const label =
     typeof config.label === "object" && config.label
       ? { enu: "Settings", ...config.label }
@@ -388,7 +394,7 @@ function parseConfigFile(value) {
     if (text !== undefined && /["\\<>\n]/.test(text))
       throw new Error("configFile label must be plain text");
   }
-  return { file, check, ready, label };
+  return { file, check, ready, timeout, label };
 }
 
 /**
@@ -764,6 +770,7 @@ export function resolve(raw, configDir) {
     configFile: configFile ? configFile.file : "",
     configCheck: composeValue(JSON.stringify(configFile ? configFile.check : [])),
     configReady: composeValue(JSON.stringify(configFile ? configFile.ready : [])),
+    configTimeout: configFile ? configFile.timeout : 600,
     configLabelJson: scriptJson(configFile ? configFile.label : null),
     appFileVolumes: config.files
       .map((file) => `      - /var/packages/${id}/target/files/${file.name}:${file.target}:ro`)
