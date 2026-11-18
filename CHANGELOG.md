@@ -26,6 +26,8 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
   user could read it from `/proc`; it is passed on stdin.
 - Revoking a user's access also closes that user's open WebSockets and discards one-time tokens
   that were not redeemed yet, so a removed privilege takes effect at once.
+- Settings and config requests are authenticated before the body is read, and their bodies and
+  answers are kept in private files with unpredictable names.
 - The app's server no longer receives DSM's sign-in cookies: they are removed on every proxy path,
   not only on ports of the app's own.
 - The window hands DSM's session token to its wrapper in the URL fragment, so the token no longer

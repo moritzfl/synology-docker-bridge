@@ -3,10 +3,22 @@
 # restores it if the app does not start with it), and follow the restart that applies it.
 cd "$(dirname "$0")" || exit 1
 . ./auth.sh
+require_admin
 
 VAR="${SYNOPKG_PKGVAR:-/var/packages/{{id}}/var}"
-input="$VAR/config.$$.in"
-output="$VAR/config.$$.out"
+TOKEN="$(cat "$VAR/token" 2>/dev/null || true)"
+PORT="$(cat "$VAR/bridge-port" 2>/dev/null || true)"
+case "$PORT" in
+  ''|*[!0-9]*) json_error 500 bridge-port ;;
+esac
+[ -n "$TOKEN" ] || json_error 500 bridge-token
+
+# Private files with unpredictable names: settings may contain secrets, and the package folder is
+# writable by the package's user.
+umask 077
+input="$(mktemp "$VAR/config.XXXXXX")" || json_error 500 temp
+trap 'rm -f "$input"' EXIT
+output="$(mktemp "$VAR/config.XXXXXX")" || json_error 500 temp
 trap 'rm -f "$input" "$output"' EXIT
 
 if [ "${REQUEST_METHOD:-GET}" = POST ]; then
@@ -20,14 +32,6 @@ if [ "${REQUEST_METHOD:-GET}" = POST ]; then
   fi
   head -c "$length" >"$input"
 fi
-require_admin
-
-TOKEN="$(cat "$VAR/token" 2>/dev/null || true)"
-PORT="$(cat "$VAR/bridge-port" 2>/dev/null || true)"
-case "$PORT" in
-  ''|*[!0-9]*) json_error 500 bridge-port ;;
-esac
-[ -n "$TOKEN" ] || json_error 500 bridge-token
 
 if [ "${REQUEST_METHOD:-GET}" = POST ]; then
   # The check runs in the app's container and may take a while.

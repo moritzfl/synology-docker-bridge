@@ -23,6 +23,19 @@ test("CGIs never put the control token in a process argument", () => {
   }
 });
 
+test("admin CGIs check access before storing a request body, in private files", () => {
+  for (const file of ["config.cgi", "settings.cgi"]) {
+    const text = read(file);
+    assert.ok(
+      text.indexOf("require_admin") < text.indexOf("head -c"),
+      `${file}: access is checked before the body is read`,
+    );
+    assert.match(text, /umask 077/, `${file}: private files`);
+    assert.match(text, /mktemp "\$VAR\//, `${file}: unpredictable temporary names`);
+    assert.doesNotMatch(text, /\$\$\.(in|out|json)/, `${file}: no predictable process-id names`);
+  }
+});
+
 test("every CGI reaches the bridge through the stdin helper", () => {
   for (const file of scripts) {
     const text = read(file);
