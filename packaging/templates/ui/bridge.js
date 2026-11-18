@@ -6,20 +6,20 @@
 
   var NAME = "{{displayName}}";
   var BASE = "/webman/3rdparty/{{id}}/";
-  var SHOW_OUTPUT = {{showOutput}};
+  var SHOW_OUTPUT = "{{showOutput}}" === "true";
   // The app runs as the package's own DSM user, whose folder permissions administrators manage.
-  var PACKAGE_USER = {{packageUser}};
+  var PACKAGE_USER = "{{packageUser}}" === "true";
   var PACKAGE_USER_NAME = "{{id}}";
-  var OUTPUT_LABEL = {{outputLabelJson}};
+  var OUTPUT_LABEL = JSON.parse("{{outputLabelJson}}");
   // Where folders may be; the package may have fallen back to its own share on this NAS.
   var OUTPUT_PARENT = "{{outputParent}}";
   // Whether the package looks for newer versions of the app's image.
-  var UPDATES = {{updatesEnabled}};
+  var UPDATES = "{{updatesEnabled}}" === "true";
   // The app's settings file, which administrators edit here; null when the package has none.
-  var CONFIG_LABEL = {{configLabelJson}};
+  var CONFIG_LABEL = JSON.parse("{{configLabelJson}}");
   var APP_ID = "SYNO.SDS.{{dsmAppName}}.Instance";
   var PORTAL_ALIAS = "{{id}}";
-  var TEXTS = {{texts}};
+  var TEXTS = JSON.parse("{{texts}}");
   var LANG = "enu";
   try {
     LANG = _S("lang") || LANG;
@@ -309,8 +309,8 @@
       var config = Ext.apply({
         id: windowId,
         title: NAME,
-        width: {{width}},
-        height: {{height}},
+        width: Number("{{width}}"),
+        height: Number("{{height}}"),
         // A Login Portal page on a phone is narrower than any desktop window.
         minWidth: standalone ? 0 : 900,
         minHeight: standalone ? 0 : 560,

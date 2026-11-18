@@ -53,9 +53,12 @@ function required(config, key) {
   return value;
 }
 
-/** JSON that is safe inside an inline script and an HTML page. */
+/**
+ * JSON for `JSON.parse("{{…}}")` in a script template: the contents of a double-quoted string,
+ * safe inside an inline script and an HTML page. The template stays valid JavaScript.
+ */
 function scriptJson(value) {
-  return JSON.stringify(value).replace(/</g, "\\u003c");
+  return JSON.stringify(JSON.stringify(value)).slice(1, -1).replace(/</g, "\\u003c");
 }
 
 function render(text, values) {

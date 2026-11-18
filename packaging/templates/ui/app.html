@@ -70,7 +70,7 @@
         frame: document.getElementById("frame"),
       };
       var NAME = "{{displayName}}";
-      var TEXTS = {{texts}};
+      var TEXTS = JSON.parse("{{texts}}");
       // The DSM window passes the user's DSM language; a browser tab falls back to its own.
       var LANG = params.get("lang")
         || (/^de\b/i.test(navigator.language || "") ? "ger" : "enu");
@@ -80,7 +80,7 @@
       var lastLogin = 0;
       // Apps with ports of their own are at the root of another address on this host, on the
       // port that matches how DSM was opened; the others are under this page's proxy path.
-      var OWN_PORTS = {{webPortsJson}};
+      var OWN_PORTS = JSON.parse("{{webPortsJson}}");
       var APP_ORIGIN = OWN_PORTS
         ? location.protocol + "//" + location.hostname + ":"
           + (location.protocol === "https:" ? OWN_PORTS.https : OWN_PORTS.http)

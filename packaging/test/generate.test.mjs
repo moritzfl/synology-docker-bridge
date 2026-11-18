@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { runInNewContext } from "node:vm";
+import { Script, runInNewContext } from "node:vm";
 import {
   buildApp,
   dsmNameFor,
@@ -33,6 +33,19 @@ function render(raw) {
   const target = fs.mkdtempSync(path.join(os.tmpdir(), "generate-test-"));
   renderTemplates({ ...values, appUser: '    user: "0:0"' }, target);
   return { values, target, read: (file) => fs.readFileSync(path.join(target, file), "utf8") };
+}
+
+/** What `var NAME = …;` in a rendered UI script evaluates to. */
+function scriptValue(source, name) {
+  const expression = new RegExp(`^ *var ${name} = (.+);$`, "m").exec(source)?.[1];
+  assert.ok(expression, `no ${name} in the script`);
+  return new Function(`return ${expression};`)();
+}
+
+/** The JavaScript of a UI file: all of bridge.js, the inline scripts of app.html. */
+function scriptsOf(file, source) {
+  if (!file.endsWith(".html")) return [source];
+  return [...source.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
 }
 
 test("derives names, ports and folders from the id", () => {
@@ -80,6 +93,34 @@ test("renders every template into valid scripts and JSON", () => {
     for (const file of all) {
       assert.doesNotMatch(read(file), /\{\{[A-Za-z]+}}/, `${file} has an unfilled value`);
     }
+    for (const file of ["ui/bridge.js", "ui/app.html"]) {
+      for (const script of scriptsOf(file, read(file))) new Script(script, { filename: file });
+    }
+  }
+});
+
+test("the UI scripts get the package's values", () => {
+  const texts = JSON.parse(fs.readFileSync(path.join(packaging, "texts.json"), "utf8"));
+  const { read } = render({ ...minimal, ui: { width: 1000, height: 700 } });
+  const bridge = read("ui/bridge.js");
+  assert.deepEqual(scriptValue(bridge, "TEXTS"), texts);
+  assert.deepEqual(scriptValue(read("ui/app.html"), "TEXTS"), texts);
+  assert.equal(scriptValue(bridge, "SHOW_OUTPUT"), true);
+  assert.deepEqual(scriptValue(bridge, "OUTPUT_LABEL"), {
+    enu: "Output folder",
+    ger: "Ausgabeordner",
+  });
+  assert.match(bridge, /width: Number\("1000"\),\n\s+height: Number\("700"\),/);
+  assert.equal(
+    scriptValue(render({ ...minimal, output: false }).read("ui/bridge.js"), "SHOW_OUTPUT"),
+    false,
+  );
+});
+
+test("the UI script templates are valid JavaScript before they are filled in", () => {
+  for (const file of ["bridge.js", "app.html"]) {
+    const source = fs.readFileSync(path.join(packaging, "templates", "ui", file), "utf8");
+    for (const script of scriptsOf(file, source)) new Script(script, { filename: file });
   }
 });
 
@@ -148,14 +189,14 @@ test("apps that need the root of an address get ports of their own on DSM's ngin
   assert.match(compose, /BRIDGE_OWN_ORIGIN: "true"/);
   assert.match(compose, /BRIDGE_SESSION_COOKIE: "dsm_bridge_session_my-app"/);
   assert.match(compose, /BRIDGE_APP_ID: "SYNO\.SDS\.MyApp\.Instance"/);
-  assert.match(read("ui/app.html"), /var OWN_PORTS = \{"http":4386,"https":4387};/);
+  assert.deepEqual(scriptValue(read("ui/app.html"), "OWN_PORTS"), { http: 4386, https: 4387 });
 
   const plain = render(minimal);
   const plainResource = JSON.parse(plain.read("conf/resource"));
   assert.equal(plainResource["web-config"]["nginx-static-config"].enable.length, 1);
   assert.equal(plainResource["port-config"], undefined);
   assert.match(plain.read("compose.yml"), /BRIDGE_SESSION_COOKIE: "dsm_bridge_session"/);
-  assert.match(plain.read("ui/app.html"), /var OWN_PORTS = null;/);
+  assert.equal(scriptValue(plain.read("ui/app.html"), "OWN_PORTS"), null);
 
   for (const bad of [
     { http: 4386 },
@@ -211,10 +252,10 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
     /BRIDGE_CONFIG_STATE: \/run\/bridge\/config-job\.json/,
     "kept with the package",
   );
-  assert.match(
-    read("ui/bridge.js"),
-    /var CONFIG_LABEL = \{"enu":"Settings","ger":"Einstellungen"};/,
-  );
+  assert.deepEqual(scriptValue(read("ui/bridge.js"), "CONFIG_LABEL"), {
+    enu: "Settings",
+    ger: "Einstellungen",
+  });
   execFileSync("sh", ["-n", path.join(render(minimal).target, "ui", "config.cgi")]);
   // DSM's AppWindow keeps its launch parameters in openConfig on every window.
   assert.doesNotMatch(read("ui/bridge.js"), /^\s+openConfig:/m);
@@ -230,7 +271,7 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
   }
   const none = render(minimal);
   assert.match(none.read("compose.yml"), /BRIDGE_CONFIG_FILE: ""/);
-  assert.match(none.read("ui/bridge.js"), /var CONFIG_LABEL = null;/);
+  assert.equal(scriptValue(none.read("ui/bridge.js"), "CONFIG_LABEL"), null);
   for (const bad of [
     "../x",
     "/etc/passwd",
@@ -262,7 +303,7 @@ test("update checks name the published image and where to get the package", () =
   for (const internal of ["sysnotify", "synocrond", "synocrond-nonroot"]) {
     assert.equal(resource[internal], undefined, `DSM refuses ${internal} from other publishers`);
   }
-  assert.match(read("ui/bridge.js"), /var UPDATES = true;/);
+  assert.equal(scriptValue(read("ui/bridge.js"), "UPDATES"), true);
   assert.equal(values.updatesEnabled, "true");
 
   const pinned = render({
@@ -275,7 +316,7 @@ test("update checks name the published image and where to get the package", () =
 
   const none = render(minimal);
   assert.match(none.read("compose.yml"), /BRIDGE_UPDATES_IMAGE: ""/);
-  assert.match(none.read("ui/bridge.js"), /var UPDATES = false;/);
+  assert.equal(scriptValue(none.read("ui/bridge.js"), "UPDATES"), false);
 
   for (const bad of [
     { ...minimal, image: "my-app:spk", updates: true },
@@ -384,11 +425,11 @@ test("as the package user, the app may use its own share and administrators get 
   assert.deepEqual(JSON.parse(read("conf/resource"))["data-share"].shares[0].permission, {
     rw: ["my-app"],
   });
-  assert.match(read("ui/bridge.js"), /var PACKAGE_USER = true;/);
+  assert.equal(scriptValue(read("ui/bridge.js"), "PACKAGE_USER"), true);
   assert.equal(values.packageUser, "true");
   const other = render(minimal);
   assert.deepEqual(JSON.parse(other.read("conf/resource"))["data-share"].shares[0].permission, {});
-  assert.match(other.read("ui/bridge.js"), /var PACKAGE_USER = false;/);
+  assert.equal(scriptValue(other.read("ui/bridge.js"), "PACKAGE_USER"), false);
 });
 
 test("the bridge sees the data folder and the package's share links to check access", () => {
