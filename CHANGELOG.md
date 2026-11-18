@@ -9,6 +9,8 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-18
+
 ### Added
 
 - **Settings** (`configFile`): administrators edit a settings file in the app's data folder under
@@ -40,4 +42,5 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 - A browser that reset a WebSocket while the app was still starting no longer stops the bridge.
 
-[Unreleased]: https://github.com/moritzfl/synology-docker-bridge/commits/main
+[Unreleased]: https://github.com/moritzfl/synology-docker-bridge/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/moritzfl/synology-docker-bridge/compare/d636fe8...0.3.0
