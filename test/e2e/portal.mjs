@@ -3,7 +3,7 @@
 // header.
 // Usage: node portal.mjs <package-id> <DSM app class>  (the alias must be on; window.mjs turns it on)
 import { chromium, devices, webkit } from "@playwright/test";
-import { HTTPS, OUTPUT, credentials, logger, waitForApp } from "./lib.mjs";
+import { HTTPS, OUTPUT, enterCredentials, logger, waitForApp } from "./lib.mjs";
 
 const [id] = process.argv.slice(2);
 if (!id) {
@@ -25,13 +25,7 @@ async function visit(label, engine, options, expectedWidth) {
     ).newPage();
     page.setDefaultTimeout(180_000);
     await page.goto(`${HTTPS}/${id}/`);
-    const user = credentials();
-    await page.locator('input[name="username"]').fill(user.username);
-    await page.locator('input[name="username"]').press("Enter");
-    const password = page.locator('input[name="current-password"]');
-    await password.waitFor({ state: "visible" });
-    await password.fill(user.password);
-    await password.press("Enter");
+    await enterCredentials(page);
     await waitForApp(page, id, log, label);
     // DSM refits its window a moment after the layout pass
     await page.waitForTimeout(1000);

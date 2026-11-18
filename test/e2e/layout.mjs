@@ -160,16 +160,16 @@ if (process.argv.includes("--portal")) {
     const frame = page.frameLocator(wrapper).frameLocator("#frame");
     const shell = frame.locator("main");
     await expect(shell).toBeVisible();
-    const portrait = page.viewportSize();
+    const { width: shortSide, height: longSide } = page.viewportSize();
     await geometry(shell, page);
     await scrollFixture(frame, page, { wheel: false });
     await page.screenshot({ path: shot("portal-portrait") });
-    await page.setViewportSize({ width: portrait.height, height: portrait.width });
-    await expect.poll(() => shell.evaluate(() => innerWidth)).toBeGreaterThan(portrait.width);
+    await page.setViewportSize({ width: longSide, height: shortSide });
+    await expect.poll(() => shell.evaluate(() => innerWidth)).toBeGreaterThan(shortSide);
     await geometry(shell, page);
     await page.screenshot({ path: shot("portal-landscape") });
-    await page.setViewportSize(portrait);
-    await expect.poll(() => shell.evaluate(() => innerWidth)).toBeLessThanOrEqual(portrait.width);
+    await page.setViewportSize({ width: shortSide, height: longSide });
+    await expect.poll(() => shell.evaluate(() => innerWidth)).toBeLessThanOrEqual(shortSide);
     await geometry(shell, page);
     log("WebKit portal: nested scrolling and portrait/landscape/portrait refit passed");
   } finally {
