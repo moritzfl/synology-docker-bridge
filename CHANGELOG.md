@@ -16,6 +16,9 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
   waits until it is up (`ready`, `timeout`). If the app does not stay up, the previous file comes
   back and the editor reopens with the app's log. A restart of the bridge or the NAS in between
   does not leave a broken file behind.
+- **Open in new tab**: a button in the window's title bar opens the app full page in a browser tab,
+  for every user. The tab stays signed in like the window, survives a reload, and its address can
+  be bookmarked.
 - **Update hint** (`updates`): once a day the bridge looks for newer tags of the published image,
   on any registry. Administrators see an **Update available** button that links to the new
   package and can skip a version.

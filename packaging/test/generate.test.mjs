@@ -500,6 +500,20 @@ test("German names fall back to English and land in INFO", () => {
   assert.match(info, /description_ger="Test-App"/);
 });
 
+test("the window opens the app in a tab, and a tab without a token goes through DSM", () => {
+  const { read } = render(minimal);
+  const bridge = read("ui/bridge.js");
+  assert.match(bridge, /addTool\(\{\s*id: "bridge-tab"/);
+  assert.match(
+    bridge,
+    /BASE \+ "app\.html\?lang=" \+ encodeURIComponent\(LANG\)\s*\+ "#SynoToken="/,
+  );
+  const wrapper = read("ui/app.html");
+  assert.match(wrapper, /var APP_ID = "SYNO\.SDS\.MyApp\.Instance";/);
+  assert.match(wrapper, /var TOKEN_KEY = "my-app:SynoToken";/);
+  assert.match(wrapper, /"\/\?launchApp=" \+ encodeURIComponent\(APP_ID\)/);
+});
+
 test("every text the UI asks for exists in English and German", () => {
   const texts = JSON.parse(fs.readFileSync(path.join(packaging, "texts.json"), "utf8"));
   assert.deepEqual(Object.keys(texts.ger).sort(), Object.keys(texts.enu).sort());

@@ -99,7 +99,8 @@
     "updateHowNoUrl": "Get the new package from the publisher of {app} and install it in Package Center > Manual Install.",
     "updateKeeps": "The data and settings of {app} stay as they are.",
     "updateDownload": "Download package",
-    "updateSkip": "Skip this version"
+    "updateSkip": "Skip this version",
+    "openTab": "Open in new tab"
   },
   "ger": {
     "opening": "{app} wird geöffnet",
@@ -201,6 +202,7 @@
     "updateHowNoUrl": "Holen Sie das neue Paket beim Herausgeber von {app} und installieren Sie es im Paket-Zentrum unter Manuelle Installation.",
     "updateKeeps": "Daten und Einstellungen von {app} bleiben erhalten.",
     "updateDownload": "Paket herunterladen",
-    "updateSkip": "Diese Version überspringen"
+    "updateSkip": "Diese Version überspringen",
+    "openTab": "In neuem Tab öffnen"
   }
 }

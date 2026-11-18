@@ -40,6 +40,7 @@ async function visit(label, engine, options, expectedWidth) {
       title: document.title,
       icon: document.querySelector("link[rel=apple-touch-icon]")?.getAttribute("href") || "",
       standalone: _S("standalone"),
+      tabButton: document.querySelectorAll(".x-tool-bridge-tab").length,
     }));
     await page.screenshot({ path: `${OUTPUT}${id}-portal-${label}.png` });
     check(`${label}: the app on its own page`, shape.standalone === true, JSON.stringify(shape));
@@ -53,6 +54,7 @@ async function visit(label, engine, options, expectedWidth) {
       shape.window === shape.width,
       `${shape.window}px of ${shape.width}px`,
     );
+    check(`${label}: no "Open in new tab" on a page of its own`, shape.tabButton === 0);
     check(
       `${label}: Home Screen icon is the app's`,
       shape.icon.includes(`/${id}/images/`),

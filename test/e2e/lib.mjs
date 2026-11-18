@@ -119,6 +119,16 @@ export function logger() {
     console.log(`[${String(Math.round((Date.now() - t0) / 1000)).padStart(4)}s]`, ...args);
 }
 
+/** Fills in DSM's own sign-in page, wherever it was reached from. */
+export async function enterCredentials(page, user = credentials()) {
+  await page.locator('input[name="username"]').fill(user.username);
+  await page.locator('input[name="username"]').press("Enter");
+  const password = page.locator('input[name="current-password"]');
+  await password.waitFor({ state: "visible" });
+  await password.fill(user.password);
+  await password.press("Enter");
+}
+
 /** Signs in on DSM's own page and waits for the desktop. */
 export async function signIn(browser, base, user = credentials(), contextOptions = {}) {
   const context = await browser.newContext({
@@ -129,12 +139,7 @@ export async function signIn(browser, base, user = credentials(), contextOptions
   const page = await context.newPage();
   page.setDefaultTimeout(180_000);
   await page.goto(base);
-  await page.locator('input[name="username"]').fill(user.username);
-  await page.locator('input[name="username"]').press("Enter");
-  const password = page.locator('input[name="current-password"]');
-  await password.waitFor({ state: "visible" });
-  await password.fill(user.password);
-  await password.press("Enter");
+  await enterCredentials(page, user);
   await page.waitForFunction(
     () => window.SYNO && SYNO.SDS && SYNO.SDS.AppLaunch && window._S && _S("SynoToken"),
   );

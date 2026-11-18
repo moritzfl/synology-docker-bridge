@@ -168,6 +168,49 @@
     }
   }
 
+  /**
+   * The app on its own in a browser tab: the window's wrapper, full page. Its calls need DSM's
+   * session token; in the fragment it never reaches a server or a Referer header, and the page
+   * takes it out of the address bar (app.html).
+   */
+  function tabUrl() {
+    return BASE + "app.html?lang=" + encodeURIComponent(LANG)
+      + "#SynoToken=" + encodeURIComponent(token);
+  }
+
+  /**
+   * DSM was opened at the tab's own address, ?launchApp=<this app>&launchParam=tab=1, which a
+   * tab without a valid token goes to: DSM signs in if needed and launches this window, which
+   * hands over to the tab. Read from the address, not the launch parameters DSM keeps, so a window
+   * DSM restores later stays a window.
+   */
+  function launchedForTab() {
+    var params = new URLSearchParams(location.search);
+    return params.get("launchApp") === APP_ID
+      && new URLSearchParams(params.get("launchParam") || "").get("tab") === "1";
+  }
+
+  // An "open in new tab" glyph in the grey and states of DSM's own window buttons. Drawn in a
+  // pseudo-element, so DSM's sprite rules for window buttons cannot move it.
+  var TAB_ICON = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
+    + " stroke='rgb(80,90,100)' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'>"
+    + "<path d='M10.5 7H8a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2.5M13 7h4v4M17 7l-6 6'/>"
+    + "</svg>";
+
+  function addTabButtonStyle() {
+    if (document.getElementById("bridge-tab-button-style")) return;
+    var tool = ".x-window .x-tool.x-tool-bridge-tab";
+    var style = document.createElement("style");
+    style.id = "bridge-tab-button-style";
+    style.textContent = tool + "{background:none;position:relative}"
+      + tool + "::after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;opacity:.6;"
+      + "background:url(\"data:image/svg+xml," + encodeURIComponent(TAB_ICON)
+      + "\") center/24px 24px no-repeat}"
+      + tool + ":hover::after{opacity:.85}"
+      + tool + ":active::after{opacity:1}";
+    document.head.appendChild(style);
+  }
+
   // DSM's single-app page declares no viewport, so phones lay it out 980 pixels wide and the
   // app's own mobile layout never applies. Ask for the device width, and name the page for the
   // Home Screen. iOS reads these when the page loads, before the user adds it.
@@ -214,6 +257,9 @@
         + "&lang=" + encodeURIComponent(LANG) + "&windowId=" + encodeURIComponent(windowId);
       var Button = ux("Button", Ext.Button);
       var standalone = isStandalone();
+      if (!standalone && launchedForTab()) {
+        location.replace(tabUrl());
+      }
       // The window holds the app and nothing else. The one package setting, the folder, is
       // offered to administrators as a single button named after it; everyone else gets no
       // toolbar at all. Restart lives where it helps (the "not responding" screen) and in
@@ -305,6 +351,30 @@
         // Right after installing, the app may not yet be allowed into its folders; say so at once.
         this.checkAccessQuietly();
       }
+    },
+
+    /**
+     * DSM's window buttons, plus one that opens the app in a browser tab of its own, for
+     * everyone. DSM inserts each button before the ones added earlier and floats them right, so
+     * adding this one first puts it left of Minimize, away from Close. The Login Portal page is
+     * already the app on its own.
+     */
+    initTools: function () {
+      var self = this;
+      if (!isStandalone()) {
+        addTabButtonStyle();
+        this.addTool({
+          id: "bridge-tab",
+          text: t("openTab"),
+          qtip: t("openTab"),
+          handler: function () { self.openTab(); },
+        });
+      }
+      this.callParent(arguments);
+    },
+
+    openTab: function () {
+      window.open(tabUrl(), "_blank", "noopener");
     },
 
     /**

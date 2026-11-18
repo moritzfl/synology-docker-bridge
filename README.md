@@ -162,6 +162,17 @@ and 502 pages already do this.
 
 ## Phones and browser tabs
 
+**Open in new tab**, the button left of Minimize in the window's title bar, opens the app on its own
+in a browser tab, for everyone who may open it:
+
+- The tab holds what the window holds, full page: it stays signed in the same way, closes when
+  DSM's session ends or the privilege is taken away, and survives a reload.
+- Its address, `https://<nas>:<dsm-port>/webman/3rdparty/<id>/app.html`, can be bookmarked. Without
+  a current DSM session it goes through DSM's sign-in (`/?launchApp=<app>&launchParam=tab%3D1`),
+  where the window hands straight over to the tab.
+- DSM's session token reaches the tab in the address's fragment, which no server sees, and the tab
+  takes it out of the address bar at once.
+
 DSM's mobile web view has a fixed menu of Synology's own modules; packages cannot add entries.
 Instead, each package registers with **Login Portal** (`web-config` → `app-portal`), the way File
 Station offers `/file`. DSM keeps the address off until an administrator turns it on: in the

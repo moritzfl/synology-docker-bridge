@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{displayName}}</title>
+  <link rel="icon" href="images/app_32.png">
   <style>
     :root { color-scheme: light; }
     html, body { height: 100%; margin: 0; background: #f4f6f8; }
@@ -47,7 +48,11 @@
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
-      var token = params.get("SynoToken") || "";
+      var APP_ID = "SYNO.SDS.{{dsmAppName}}.Instance";
+      // On its own as a browser tab (the window's "Open in new tab") instead of inside the window.
+      var TAB = window.parent === window;
+      var TOKEN_KEY = "{{id}}:SynoToken";
+      var token = params.get("SynoToken") || (TAB ? tabToken() : "");
       var els = {
         state: document.getElementById("state"),
         title: document.getElementById("title"),
@@ -76,6 +81,40 @@
           + (location.protocol === "https:" ? OWN_PORTS.https : OWN_PORTS.http)
         : location.origin;
       var APP_BASE = OWN_PORTS ? APP_ORIGIN + "/" : "proxy/";
+
+      // The window opens the tab with DSM's session token in the fragment. Keep it for reloads of
+      // this tab only, and take it out of the address bar.
+      function tabToken() {
+        var fresh = new URLSearchParams(location.hash.slice(1)).get("SynoToken") || "";
+        try {
+          if (!fresh) return sessionStorage.getItem(TOKEN_KEY) || "";
+          sessionStorage.setItem(TOKEN_KEY, fresh);
+        } catch (ignore) {}
+        history.replaceState(null, "", location.pathname + location.search);
+        return fresh;
+      }
+
+      // A tab whose token is missing or ended (a bookmark, a new DSM sign-in) has no window to ask
+      // for one. DSM's address for the tab signs in if needed and launches the window, which hands
+      // over to a tab with a fresh token (bridge.js). Once a minute at most, so it cannot loop.
+      function relaunch() {
+        var key = "{{id}}:relaunched";
+        try {
+          if (Date.now() - Number(sessionStorage.getItem(key) || 0) < 60000) return false;
+          sessionStorage.setItem(key, String(Date.now()));
+          sessionStorage.removeItem(TOKEN_KEY);
+        } catch (ignore) {
+          return false;
+        }
+        location.replace("/?launchApp=" + encodeURIComponent(APP_ID)
+          + "&launchParam=" + encodeURIComponent("tab=1"));
+        return true;
+      }
+
+      function fail(error) {
+        if (TAB && (error.code === "auth" || error.code === "token") && relaunch()) return;
+        show({ title: t("couldNotOpen"), message: explain(error), retry: true });
+      }
 
       function t(key, values) {
         var text = STRINGS[key] || TEXTS.enu[key] || key;
@@ -214,7 +253,7 @@
           return login(mine);
         }).catch(function (error) {
           if (mine !== generation) return;
-          show({ title: t("couldNotOpen"), message: explain(error), retry: true });
+          fail(error);
         });
       }
 
@@ -263,7 +302,7 @@
           if (error.code === "denied" || error.code === "auth") {
             generation++;
             els.frame.src = "about:blank";
-            show({ title: t("couldNotOpen"), message: explain(error), retry: true });
+            fail(error);
           }
         });
       }, 10 * 60 * 1000);
@@ -302,9 +341,7 @@
             return;
           }
           var mine = ++generation;
-          login(mine).catch(function (error) {
-            show({ title: t("couldNotOpen"), message: explain(error), retry: true });
-          });
+          login(mine).catch(fail);
         } else if (type === "bridge:busy") {
           // A change is being applied; hold this state without polling until the window says
           // the app is coming back, so the old instance is not reopened just before it stops.

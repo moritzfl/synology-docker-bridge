@@ -6,6 +6,7 @@ import {
   HTTPS,
   OUTPUT,
   appFrame,
+  enterCredentials,
   guest,
   launch,
   logger,
@@ -102,6 +103,59 @@ try {
       (await page.locator(".x-menu:visible").count()) === 0,
     );
   }
+
+  // 2b. the app on its own in a browser tab, from the title bar. The tab survives a reload, and its
+  // own address, for a bookmark or after DSM's session ended, goes through DSM's sign-in.
+  const tabButton = win.locator(".x-window-header .x-tool-bridge-tab");
+  const tabX = (await tabButton.boundingBox())?.x ?? -1;
+  const minimizeX = (await win.locator(".x-window-header .x-tool-minimize").boundingBox())?.x ?? -1;
+  check(
+    "the title bar offers a new tab, left of Minimize",
+    (await tabButton.getAttribute("aria-label")) === "Open in new tab" &&
+      tabX >= 0 &&
+      tabX < minimizeX,
+  );
+  const header = await win.locator(".x-window-header").first().boundingBox();
+  await page.screenshot({
+    path: shot("2-title-bar"),
+    clip: { x: header.x + header.width - 200, y: header.y, width: 200, height: header.height },
+  });
+  const tabAddress = new RegExp(`/3rdparty/${id}/app\\.html\\?lang=\\w+$`);
+  const [tab] = await Promise.all([page.context().waitForEvent("page"), tabButton.click()]);
+  await tab.waitForURL(tabAddress);
+  await waitForApp(tab, id, log, "new tab", 120);
+  const fullPage = await tab.evaluate(() => {
+    const frame = document.getElementById("frame");
+    return frame.offsetWidth === innerWidth && frame.offsetHeight === innerHeight && !window.opener;
+  });
+  check("the tab shows the app full page, without DSM's token in its address", fullPage, tab.url());
+  await tab.screenshot({ path: shot("2-tab") });
+  await tab.reload();
+  await waitForApp(tab, id, log, "tab reload", 120);
+  check("the tab survives a reload", tabAddress.test(tab.url()), tab.url());
+  const bookmark = await page.context().newPage();
+  await bookmark.goto(`${HTTPS}/webman/3rdparty/${id}/app.html`);
+  await bookmark.waitForURL(tabAddress, { timeout: 180_000 });
+  await waitForApp(bookmark, id, log, "bookmark", 120);
+  check("a bookmarked tab gets a new token through DSM", true);
+  await Promise.all([tab.close(), bookmark.close()]);
+  const signedOut = await browser.newContext({ ignoreHTTPSErrors: true });
+  const visitor = await signedOut.newPage();
+  const dialogs = [];
+  visitor.on("dialog", (dialog) => {
+    dialogs.push(dialog.type());
+    dialog.accept().catch(() => {});
+  });
+  await visitor.goto(`${HTTPS}/?launchApp=${app}&launchParam=tab%3D1`);
+  await enterCredentials(visitor);
+  await visitor.waitForURL(tabAddress, { timeout: 180_000 });
+  await waitForApp(visitor, id, log, "after sign-in", 120);
+  check(
+    "signed out, the tab's address signs in to DSM and opens the tab",
+    dialogs.length === 0,
+    dialogs.join(", "),
+  );
+  await signedOut.close();
 
   async function menuItem(text) {
     if (hasMenu) {
