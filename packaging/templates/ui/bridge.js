@@ -264,8 +264,9 @@
       var self = this;
       var windowId = Ext.id(null, "{{id}}-window-");
       var iframeId = windowId + "-frame";
-      var wrapperUrl = BASE + "app.html?SynoToken=" + encodeURIComponent(token)
-        + "&lang=" + encodeURIComponent(LANG) + "&windowId=" + encodeURIComponent(windowId);
+      // In the fragment: no server and no Referer header sees DSM's session token.
+      var wrapperUrl = BASE + "app.html?lang=" + encodeURIComponent(LANG)
+        + "&windowId=" + encodeURIComponent(windowId) + "#SynoToken=" + encodeURIComponent(token);
       var Button = ux("Button", Ext.Button);
       var standalone = isStandalone();
       if (!standalone && launchedForTab()) {

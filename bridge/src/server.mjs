@@ -158,8 +158,7 @@ function ownPublicTarget(request) {
 
 /** The request's cookies the app may see: none of the bridge's, and none of DSM's. */
 function appCookies(header) {
-  const cookie = auth.stripCookies(header);
-  return config.ownOrigin ? withoutDsmCookies(cookie) : cookie;
+  return withoutDsmCookies(auth.stripCookies(header));
 }
 
 // The bridge's own pages, in the browser's language. Inside the DSM window the wrapper shows the

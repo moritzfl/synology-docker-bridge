@@ -219,9 +219,10 @@ The same AirPlay Capture package through DSM Login Portal on an iPhone:
   DSM user and asks the bridge for a one-time token. The browser exchanges that token for an
   HttpOnly `dsm_bridge_session` cookie on the DSM origin. The bridge never calls DSM itself.
 - The session cookie is scoped to the package's own proxy path, so several bridge packages can be
-  open side by side. It is stripped before the request reaches the app. The app still sees its
-  own cookies; cookies it sets on an absolute path are moved under the proxy path so they never
-  land on DSM's own pages.
+  open side by side. It is stripped before the request reaches the app. DSM's own sign-in cookies
+  (`id`, `_SSID`, …) are stripped on every proxy path too, so the app's server never sees them.
+  The app still sees its own cookies; cookies it sets on an absolute path are moved under the
+  proxy path so they never land on DSM's own pages.
 - With `identityHeaders: true`, every request reaches the app with `Remote-User: <DSM user>`,
   `Remote-Groups: <groups>` (comma-separated; administrators are in `administrators`) and, when the
   DSM account has them, `Remote-Name: <full name>` and `Remote-Email: <address>`, the convention of

@@ -550,6 +550,13 @@ test("the window opens the app in a tab, and a tab without a token goes through 
     /BASE \+ "app\.html\?lang=" \+ encodeURIComponent\(LANG\)\s*\+ "#SynoToken="/,
   );
   const wrapper = read("ui/app.html");
+  assert.match(
+    bridge,
+    /var wrapperUrl = BASE \+ "app\.html\?lang=" \+ encodeURIComponent\(LANG\)\s*\+ "&windowId=" \+ encodeURIComponent\(windowId\)\s*\+ "#SynoToken="/,
+    "the window, too, hands the token over in the fragment",
+  );
+  assert.doesNotMatch(bridge, /"app\.html\?SynoToken="/);
+  assert.match(wrapper, /params\.get\("SynoToken"\) \|\| hashToken\(\)/);
   assert.match(wrapper, /var APP_ID = "SYNO\.SDS\.MyApp\.Instance";/);
   assert.match(wrapper, /var TOKEN_KEY = "my-app:SynoToken";/);
   assert.match(wrapper, /"\/\?launchApp=" \+ encodeURIComponent\(APP_ID\)/);

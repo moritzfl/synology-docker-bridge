@@ -57,7 +57,14 @@
       // On its own as a browser tab (the window's "Open in new tab") instead of inside the window.
       var TAB = window.parent === window;
       var TOKEN_KEY = "{{id}}:SynoToken";
-      var token = params.get("SynoToken") || (TAB ? tabToken() : "");
+      // Query only for an old bookmark; the window and the tab use the fragment.
+      var fresh = params.get("SynoToken") || hashToken();
+      var token = fresh || (TAB ? storedToken() : "");
+      if (TAB && fresh) {
+        try {
+          sessionStorage.setItem(TOKEN_KEY, fresh);
+        } catch (ignore) {}
+      }
       var els = {
         state: document.getElementById("state"),
         title: document.getElementById("title"),
@@ -87,16 +94,20 @@
         : location.origin;
       var APP_BASE = OWN_PORTS ? APP_ORIGIN + "/" : "proxy/";
 
-      // The window opens the tab with DSM's session token in the fragment. Keep it for reloads of
-      // this tab only, and take it out of the address bar.
-      function tabToken() {
+      // The window and the tab hand over DSM's session token in the fragment: no server and no
+      // Referer header sees it. Take it out of the address bar.
+      function hashToken() {
         var fresh = new URLSearchParams(location.hash.slice(1)).get("SynoToken") || "";
-        try {
-          if (!fresh) return sessionStorage.getItem(TOKEN_KEY) || "";
-          sessionStorage.setItem(TOKEN_KEY, fresh);
-        } catch (ignore) {}
-        history.replaceState(null, "", location.pathname + location.search);
+        if (fresh) history.replaceState(null, "", location.pathname + location.search);
         return fresh;
+      }
+
+      function storedToken() {
+        try {
+          return sessionStorage.getItem(TOKEN_KEY) || "";
+        } catch (ignore) {
+          return "";
+        }
       }
 
       // A tab whose token is missing or ended (a bookmark, a new DSM sign-in) has no window to ask
