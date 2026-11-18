@@ -606,15 +606,14 @@ async function pointLink(target) {
     throw new HttpError(400, "folder is outside the output volume");
   }
   const link = linkHostPath();
-  try {
-    const stat = await fs.lstat(link);
-    if (!stat.isSymbolicLink()) {
-      throw new HttpError(409, "the output link path is occupied by a real folder");
-    }
-  } catch (error) {
+  const stat = await fs.lstat(link).catch((error) => {
     if (error.code !== "ENOENT") {
       throw error;
     }
+    return null;
+  });
+  if (stat && !stat.isSymbolicLink()) {
+    throw new HttpError(409, "the output link path is occupied by a real folder");
   }
   const temporary = `${link}.tmp.${process.pid}`;
   await fs.rm(temporary, { force: true });
@@ -735,31 +734,12 @@ async function ensureOutput(value, moveExisting) {
     throw new HttpError(400, "choose a folder outside the current output folder");
   }
 
-  const moved = [];
-  const skipped = [];
+  let moved = [];
+  let skipped = [];
   await docker.stop(config.container);
   try {
     if (moveExisting) {
-      try {
-        const entries = await fs.readdir(previousHost);
-        for (const entry of entries) {
-          if (entry === config.outputLink) {
-            continue;
-          }
-          const source = path.posix.join(previousHost, entry);
-          const destination = path.posix.join(host, entry);
-          if (await exists(destination)) {
-            skipped.push(entry);
-            continue;
-          }
-          await execFileAsync("mv", ["--", source, destination], { timeout: 600_000 });
-          moved.push(entry);
-        }
-      } catch (error) {
-        if (error.code !== "ENOENT") {
-          throw error;
-        }
-      }
+      ({ moved, skipped } = await moveEntries(previousHost, host));
     }
 
     await pointLink(target);
@@ -779,6 +759,32 @@ async function ensureOutput(value, moveExisting) {
   }
   log("info", "output folder changed", { outputDir, moved: moved.length, skipped: skipped.length });
   return { ...(await status()), moved, skipped };
+}
+
+// Moves the old output folder's entries to the new one; names that already exist there stay.
+async function moveEntries(from, to) {
+  const moved = [];
+  const skipped = [];
+  try {
+    for (const entry of await fs.readdir(from)) {
+      if (entry === config.outputLink) {
+        continue;
+      }
+      const source = path.posix.join(from, entry);
+      const destination = path.posix.join(to, entry);
+      if (await exists(destination)) {
+        skipped.push(entry);
+        continue;
+      }
+      await execFileAsync("mv", ["--", source, destination], { timeout: 600_000 });
+      moved.push(entry);
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+  return { moved, skipped };
 }
 
 async function exists(file) {
