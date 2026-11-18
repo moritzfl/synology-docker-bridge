@@ -224,7 +224,7 @@ export function createConfigFile({
       if (!saved.pending || !["restarting", "restoring"].includes(job.state)) return;
       pending = saved.pending;
       log("info", "watching the app with the new settings again", { file });
-      apply(pending, job.state === "restoring" ? "restore" : "watch");
+      void apply(pending, job.state === "restoring" ? "restore" : "watch");
     },
 
     /** Checks and saves `content`, then restarts the app in the background; see status(). */
@@ -264,7 +264,7 @@ export function createConfigFile({
         throw error;
       }
       log("info", "settings saved; restarting the app", { file });
-      apply(restore);
+      void apply(restore);
       return { ok: true, notes: result.output, version: versionOf(content) };
     },
   };
