@@ -25,6 +25,21 @@ test("creates the secret once, readable only by its owner", async () => {
   assert.notEqual(await ensureSecret(file, null), "short", "a damaged secret is replaced");
 });
 
+test("a symlinked secret is replaced, never followed", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "secret-"));
+  const target = path.join(dir, "target");
+  const planted = "a".repeat(64);
+  fs.writeFileSync(target, `${planted}\n`);
+  const file = path.join(dir, ".bridge-secret");
+  fs.symlinkSync(target, file);
+  const secret = await ensureSecret(file, null);
+  assert.match(secret, /^[0-9a-f]{64}$/);
+  assert.notEqual(secret, planted, "the planted value is not used");
+  assert.equal(fs.readFileSync(target, "utf8"), `${planted}\n`, "the target is untouched");
+  assert.equal(fs.lstatSync(file).isSymbolicLink(), false);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o400);
+});
+
 test("drops identity headers a browser sends, even when the feature is off", () => {
   const headers = { "remote-user": "admin", "Remote-Groups": "administrators", accept: "*/*" };
   applyIdentity(headers, { user: "anna", groups: ["users"] }, false);

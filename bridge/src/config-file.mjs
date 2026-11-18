@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
+import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isInside } from "./validate.mjs";
 
 export const MAX_BYTES = 256 * 1024;
 
@@ -47,6 +49,7 @@ export function createConfigFile({
   stateFile = "",
 }) {
   const target = path.posix.join(dir, file);
+  const name = path.posix.basename(file);
   let job = { state: "idle" };
   // While the app restarts with a new file: what to put back ({ previous, stat, since }).
   let pending = null;
@@ -63,35 +66,92 @@ export function createConfigFile({
     }
   }
 
-  async function current() {
-    let stat;
+  /**
+   * The data folder and the file's parent with symlinks resolved. The app owns the folder's
+   * contents, so a symlinked parent must not lead the root bridge outside it.
+   */
+  async function resolved() {
+    let root;
     try {
-      stat = await fs.lstat(target);
+      root = await fs.realpath(dir);
     } catch (error) {
-      if (error.code === "ENOENT") return { content: null, stat: null };
+      if (error.code === "ENOENT") return { parent: null };
       throw error;
     }
-    if (!stat.isFile()) throw new ConfigError(409, "not-a-file");
-    return { content: await fs.readFile(target, "utf8"), stat };
+    let parent;
+    try {
+      parent = await fs.realpath(path.posix.dirname(target));
+    } catch (error) {
+      if (error.code === "ENOENT") return { parent: null };
+      throw error;
+    }
+    if (!isInside(root, parent)) throw new ConfigError(409, "not-a-file");
+    return { parent };
   }
 
+  async function current() {
+    const { parent } = await resolved();
+    if (!parent) return { content: null, stat: null };
+    let handle;
+    try {
+      handle = await fs.open(
+        path.posix.join(parent, name),
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
+    } catch (error) {
+      if (error.code === "ENOENT") return { content: null, stat: null };
+      if (["ELOOP", "ENOTDIR"].includes(error.code)) throw new ConfigError(409, "not-a-file");
+      throw error;
+    }
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile()) throw new ConfigError(409, "not-a-file");
+      return { content: await handle.readFile("utf8"), stat };
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /** Writes to a fresh random name inside the resolved folder, then renames it into place. */
   async function write(content, stat) {
+    const { parent } = await resolved();
+    if (!parent) throw new ConfigError(409, "not-a-file");
+    const destination = path.posix.join(parent, name);
     if (content === null) {
-      await fs.rm(target, { force: true });
+      await fs.rm(destination, { force: true });
       return;
     }
-    const temporary = path.posix.join(
-      path.posix.dirname(target),
-      `.${path.posix.basename(target)}.bridge-${process.pid}`,
-    );
-    await fs.writeFile(temporary, content, { mode: stat ? stat.mode & 0o7777 : 0o644 });
-    if (stat) {
-      await fs.chown(temporary, stat.uid, stat.gid).catch(() => {});
-    } else {
-      const owner = await appOwner();
-      if (owner) await fs.chown(temporary, owner.uid, owner.gid).catch(() => {});
+    let temporary;
+    let handle;
+    for (let attempt = 0; ; attempt++) {
+      temporary = path.posix.join(
+        parent,
+        `.${name}.bridge-${crypto.randomBytes(8).toString("hex")}`,
+      );
+      try {
+        handle = await fs.open(temporary, "wx", 0o600);
+        break;
+      } catch (error) {
+        if (error.code === "EEXIST" && attempt < 5) continue;
+        throw error;
+      }
     }
-    await fs.rename(temporary, target);
+    try {
+      await handle.writeFile(content);
+      await handle.chmod(stat ? stat.mode & 0o7777 : 0o644);
+      if (stat) {
+        await handle.chown(stat.uid, stat.gid).catch(() => {});
+      } else {
+        const owner = await appOwner();
+        if (owner) await handle.chown(owner.uid, owner.gid).catch(() => {});
+      }
+    } catch (error) {
+      await handle.close().catch(() => {});
+      await fs.rm(temporary, { force: true });
+      throw error;
+    }
+    await handle.close();
+    await fs.rename(temporary, destination);
   }
 
   /** A new file belongs to the app's own user, like the files the app creates. */
@@ -104,10 +164,10 @@ export function createConfigFile({
   /** Runs the app's own check on the candidate; the app reads it from a scratch folder. */
   async function runCheck(content) {
     if (!check.length) return { ok: true, output: "" };
-    const scratch = path.posix.join(dir, ".bridge-check");
-    await fs.rm(scratch, { recursive: true, force: true });
-    await fs.mkdir(scratch, { mode: 0o755 });
-    const name = path.posix.basename(file);
+    // A fresh random folder: the app owns the data folder, so a predictable check path could be
+    // swapped for a symlink while the bridge writes the candidate as root.
+    const scratch = await fs.mkdtemp(path.posix.join(dir, ".bridge-check-"));
+    await fs.chmod(scratch, 0o755);
     const owner = await appOwner();
     try {
       await fs.writeFile(path.posix.join(scratch, name), content, { mode: 0o644 });
@@ -115,7 +175,7 @@ export function createConfigFile({
         await fs.chown(scratch, owner.uid, owner.gid).catch(() => {});
         await fs.chown(path.posix.join(scratch, name), owner.uid, owner.gid).catch(() => {});
       }
-      const candidate = path.posix.join(containerDir, ".bridge-check", name);
+      const candidate = path.posix.join(containerDir, path.posix.basename(scratch), name);
       const info = await docker.inspect(container);
       if (info?.state !== "running") return { ok: true, output: "", skipped: true };
       const result = await docker.exec(

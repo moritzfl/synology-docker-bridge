@@ -19,6 +19,9 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 - The bridge's own pages (the app is starting, sign-in required) declare their language, so
   screen readers read the German pages in German.
+- The bridge no longer follows symlinks that an app places in its data folder: the shared identity
+  secret and the settings file are opened without following links and written under fresh random
+  names, so the root bridge cannot be pointed at another file.
 
 ## [0.3.0] - 2026-11-18
 

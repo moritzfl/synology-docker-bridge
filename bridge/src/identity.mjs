@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { constants, readFileSync } from "node:fs";
 
 /**
  * Headers that tell the app who is signed in, the convention of Authelia, Authentik and
@@ -50,25 +50,81 @@ export function applyIdentity(headers, identity, enabled, secret = "") {
 /**
  * The shared secret in the app's data folder, created once. Only the app's own user may read it
  * (root when the app runs as root); `user` is null when that is not known yet.
+ *
+ * The app owns the folder's contents, so it can plant a symlink where the secret should be. The
+ * secret is opened without following it and written to a fresh random name, so the root bridge
+ * never reads or overwrites another file through such a link.
  */
 export async function ensureSecret(file, user) {
-  let secret = "";
-  try {
-    secret = (await fs.readFile(file, "utf8")).trim();
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
+  const existing = await readSecret(file, user);
+  if (existing) {
+    return existing;
   }
-  if (!/^[0-9a-f]{64}$/.test(secret)) {
-    secret = crypto.randomBytes(32).toString("hex");
-    const temporary = `${file}.tmp.${process.pid}`;
-    await fs.writeFile(temporary, `${secret}\n`, { mode: 0o600 });
-    await fs.rename(temporary, file);
-  }
-  await fs.chmod(file, 0o400);
-  if (user) {
-    await fs.chown(file, user.uid, user.gid);
-  }
+  const secret = crypto.randomBytes(32).toString("hex");
+  await writeSecret(file, secret, user);
   return secret;
+}
+
+/** The secret when it is a regular file owned by root or the app; otherwise "". */
+async function readSecret(file, user) {
+  let handle;
+  try {
+    handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (["ENOENT", "ELOOP", "ENOTDIR"].includes(error.code)) return "";
+    throw error;
+  }
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || (user && stat.uid !== 0 && stat.uid !== user.uid)) {
+      return "";
+    }
+    const secret = (await handle.readFile("utf8")).trim();
+    if (!/^[0-9a-f]{64}$/.test(secret)) {
+      return "";
+    }
+    await handle.chmod(0o400);
+    if (user) {
+      await handle.chown(user.uid, user.gid);
+    }
+    return secret;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function writeSecret(file, secret, user) {
+  for (let attempt = 0; ; attempt++) {
+    const temporary = `${file}.tmp.${crypto.randomBytes(8).toString("hex")}`;
+    let handle;
+    try {
+      handle = await fs.open(temporary, "wx", 0o600);
+    } catch (error) {
+      if (error.code === "EEXIST" && attempt < 5) continue;
+      throw error;
+    }
+    let wrote = false;
+    try {
+      await handle.writeFile(`${secret}\n`);
+      await handle.chmod(0o400);
+      if (user) {
+        await handle.chown(user.uid, user.gid);
+      }
+      wrote = true;
+    } finally {
+      await handle.close();
+      if (!wrote) {
+        await fs.rm(temporary, { force: true });
+      }
+    }
+    try {
+      await fs.rename(temporary, file);
+    } catch (error) {
+      await fs.rm(temporary, { force: true });
+      throw error;
+    }
+    return;
+  }
 }
 
 const EMAIL = /^[^\s@:<>"(),;\\]+@[^\s@:<>"(),;\\]+\.[^\s@:<>"(),;\\]+$/;

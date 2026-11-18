@@ -30,12 +30,14 @@ function fakeDocker({ checkExit = 0, checkOutput = "", crashes = 0 } = {}) {
       }
     },
     async exec(container, command) {
-      const file = command.find((arg) => arg.endsWith(".bridge-check/settings.py"));
+      const file = command.find((arg) => /\/\.bridge-check-[^/]+\/settings\.py$/.test(arg));
       docker.execs.push({ command, candidate: file });
-      docker.candidateSeen = fs.readFileSync(
-        path.join(docker.dir, ".bridge-check/settings.py"),
-        "utf8",
-      );
+      if (file) {
+        docker.candidateSeen = fs.readFileSync(
+          path.join(docker.dir, file.replace(/^\/data\//, "")),
+          "utf8",
+        );
+      }
       return { exitCode: checkExit, output: checkOutput };
     },
     async logs() {
@@ -47,12 +49,16 @@ function fakeDocker({ checkExit = 0, checkOutput = "", crashes = 0 } = {}) {
 
 function setup(options = {}, initial = "DEBUG = False\n") {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "config-file-"));
-  if (initial !== null) fs.writeFileSync(path.join(dir, "settings.py"), initial);
+  const file = options.file || "settings.py";
+  if (initial !== null) {
+    fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+    fs.writeFileSync(path.join(dir, file), initial);
+  }
   const docker = fakeDocker(options);
   docker.dir = dir;
   const config = createConfigFile({
     dir,
-    file: "settings.py",
+    file,
     containerDir: "/data",
     check: options.noCheck ? [] : ["python", "check.py", "{file}"],
     docker,
@@ -66,7 +72,7 @@ function setup(options = {}, initial = "DEBUG = False\n") {
     dir,
     docker,
     config,
-    read: () => fs.readFileSync(path.join(dir, "settings.py"), "utf8"),
+    read: () => fs.readFileSync(path.join(dir, file), "utf8"),
   };
 }
 
@@ -116,12 +122,13 @@ test("a failed check leaves the file and the app alone and says why", async () =
   assert.equal(read(), "DEBUG = False\n");
   assert.equal(docker.restarts, 0);
   assert.equal(docker.candidateSeen, "DEBUG = (\n", "the check saw the new text");
-  assert.deepEqual(docker.execs[0].command, [
-    "python",
-    "check.py",
-    "/data/.bridge-check/settings.py",
-  ]);
-  assert.equal(fs.existsSync(path.join(dir, ".bridge-check")), false, "no scratch left behind");
+  assert.deepEqual(docker.execs[0].command.slice(0, 2), ["python", "check.py"]);
+  assert.match(docker.execs[0].command[2], /^\/data\/\.bridge-check-[^/]+\/settings\.py$/);
+  assert.equal(
+    fs.readdirSync(dir).some((entry) => entry.startsWith(".bridge-check")),
+    false,
+    "no scratch left behind",
+  );
   assert.equal(config.status().state, "idle");
 });
 
@@ -173,6 +180,34 @@ test("refuses symlinks and files that are too large", async () => {
     { code: "too-large" },
   );
   await assert.rejects(other.save({ content: 1, version: "" }), { code: "invalid" });
+});
+
+test("a symlinked parent cannot take the settings file outside the data folder", async () => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "config-outside-"));
+  fs.writeFileSync(path.join(outside, "settings.py"), "OUTSIDE = True\n");
+  const { config, dir } = setup({ file: "nested/settings.py" }, null);
+  fs.symlinkSync(outside, path.join(dir, "nested"));
+  await assert.rejects(config.read(), { code: "not-a-file" });
+  await assert.rejects(
+    config.save({ content: "X = 1\n", version: versionOf("OUTSIDE = True\n") }),
+    { code: "not-a-file" },
+  );
+  assert.equal(fs.readFileSync(path.join(outside, "settings.py"), "utf8"), "OUTSIDE = True\n");
+});
+
+test("a symlink at the old temporary name cannot redirect a save", async () => {
+  const { config, dir, read } = setup({ noCheck: true });
+  const victim = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "config-victim-")), "file");
+  fs.writeFileSync(victim, "keep\n");
+  fs.symlinkSync(victim, path.join(dir, `.settings.py.bridge-${process.pid}`));
+  await config.save({ content: "DEBUG = True\n", version: versionOf(read()) });
+  await settled(config);
+  assert.equal(fs.readFileSync(victim, "utf8"), "keep\n");
+  assert.equal(
+    fs.readdirSync(dir).some((entry) => /^\.settings\.py\.bridge-[0-9a-f]{16}$/.test(entry)),
+    false,
+    "no temporary file left behind",
+  );
 });
 
 test("with a ready command, an app that only shows a maintenance page is not up yet", async () => {
