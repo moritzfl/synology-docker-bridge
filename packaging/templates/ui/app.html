@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{displayName}}</title>
   <link rel="icon" href="images/app_32.png">
+  <!-- Added to the Home Screen, the tab opens like an app, without DSM's header or browser bars. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="{{displayName}}">
+  <link rel="apple-touch-icon" href="images/app_256.png">
   <style>
     :root { color-scheme: light; }
     html, body { height: 100%; margin: 0; background: #f4f6f8; }

@@ -172,6 +172,8 @@ in a browser tab, for everyone who may open it:
   where the window hands straight over to the tab.
 - DSM's session token reaches the tab in the address's fragment, which no server sees, and the tab
   takes it out of the address bar at once.
+- Added to the Home Screen, the tab opens like an app with the app's name and icon, without DSM's
+  header or Safari's bars; each start gets a fresh token through DSM.
 
 DSM's mobile web view has a fixed menu of Synology's own modules; packages cannot add entries.
 Instead, each package registers with **Login Portal** (`web-config` → `app-portal`), the way File
@@ -181,6 +183,8 @@ Applications**. The app is then at `https://<nas>:<dsm-port>/<id>/`:
 
 - DSM's own sign-in page, including 2-factor and SSO, then the app on its own, full page, with DSM's
   account menu (Sign Out). Application Privileges apply as on the desktop.
+- **Open in new tab**, left of the account name in DSM's header, opens the tab above, which has no
+  DSM header.
 - On phones the page uses the device width, so the app's own mobile layout applies, and it can be
   added to the Home Screen with the app's name and icon; from there it opens without Safari's
   bars. DSM sizes its window only once, before the phone viewport applies, and Safari sends no

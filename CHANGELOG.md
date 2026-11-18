@@ -9,6 +9,12 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ## [Unreleased]
 
+### Added
+
+- **Open in new tab** on the Login Portal page too, left of the account name in DSM's header, so
+  phones can show the app without that header. Added to the Home Screen, the tab opens like an
+  app, with the app's name and icon.
+
 ## [0.3.0] - 2026-11-18
 
 ### Added

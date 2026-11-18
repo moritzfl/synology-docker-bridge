@@ -199,15 +199,26 @@
 
   function addTabButtonStyle() {
     if (document.getElementById("bridge-tab-button-style")) return;
+    var icon = "url(\"data:image/svg+xml," + encodeURIComponent(TAB_ICON) + "\") center/24px 24px no-repeat";
     var tool = ".x-window .x-tool.x-tool-bridge-tab";
+    // The Login Portal header has no window buttons. Its own button is a finger's size but takes
+    // only the account name's 20 pixels of height, so the header row does not grow.
+    var portal = ".sds-standalone-main-window-header .bridge-portal-tab";
     var style = document.createElement("style");
     style.id = "bridge-tab-button-style";
     style.textContent = tool + "{background:none;position:relative}"
       + tool + "::after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;opacity:.6;"
-      + "background:url(\"data:image/svg+xml," + encodeURIComponent(TAB_ICON)
-      + "\") center/24px 24px no-repeat}"
+      + "background:" + icon + "}"
       + tool + ":hover::after{opacity:.85}"
-      + tool + ":active::after{opacity:1}";
+      + tool + ":active::after{opacity:1}"
+      + portal + "{display:block;width:36px;height:36px;margin:-8px 6px -8px 0;padding:0;border:0;"
+      + "border-radius:6px;background:transparent;position:relative;cursor:pointer}"
+      + portal + "::after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;opacity:.6;"
+      + "background:" + icon + "}"
+      + portal + ":hover{background-color:rgba(0,0,0,.05)}"
+      + portal + ":hover::after{opacity:.85}"
+      + portal + ":active::after{opacity:1}"
+      + portal + ":focus-visible{outline:2px solid #057feb;outline-offset:-2px}";
     document.head.appendChild(style);
   }
 
@@ -356,8 +367,8 @@
     /**
      * DSM's window buttons, plus one that opens the app in a browser tab of its own, for
      * everyone. DSM inserts each button before the ones added earlier and floats them right, so
-     * adding this one first puts it left of Minimize, away from Close. The Login Portal page is
-     * already the app on its own.
+     * adding this one first puts it left of Minimize, away from Close. The Login Portal page has
+     * no title bar; its header gets the button instead (addPortalTabButton).
      */
     initTools: function () {
       var self = this;
@@ -432,6 +443,35 @@
           component.hide();
         }
       });
+      this.addPortalTabButton();
+    },
+
+    /**
+     * The Login Portal page shows the app under DSM's header, which takes room on a phone. The
+     * window's "Open in new tab", left of the account name, opens the app without it; that tab
+     * can also go on the Home Screen (app.html).
+     */
+    addPortalTabButton: function () {
+      var self = this;
+      var bar = this.el.child(".sds-standalone-main-window-header__toolbar");
+      var toolbar = bar && Ext.getCmp(bar.id);
+      if (!toolbar) return;
+      addTabButtonStyle();
+      toolbar.insert(0, new Ext.BoxComponent({
+        autoEl: {
+          tag: "button",
+          type: "button",
+          cls: "bridge-portal-tab",
+          title: t("openTab"),
+          "aria-label": t("openTab"),
+        },
+        listeners: {
+          render: function (button) {
+            button.getEl().on("click", function () { self.openTab(); });
+          },
+        },
+      }));
+      toolbar.doLayout();
     },
 
     loadStatus: function () {
