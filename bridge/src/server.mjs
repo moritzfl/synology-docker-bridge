@@ -19,7 +19,7 @@ import { applyIdentity, dsmEmail, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
 import { pruneSuperseded } from "./images.mjs";
-import { hostPath, isInside, normalizeDirectory } from "./validate.mjs";
+import { ensureFolder, hostPath, isInside, normalizeDirectory, realFolder } from "./validate.mjs";
 
 const execFileAsync = promisify(execFile);
 const config = loadConfig();
@@ -605,8 +605,14 @@ function containerLinkPath() {
 }
 
 async function pointLink(target) {
-  const host = hostPath(target, config.allowedRoot, config.hostRoot);
-  const relative = path.posix.relative(config.hostRoot, host);
+  const root = await fs.realpath(config.hostRoot);
+  let host;
+  try {
+    host = await fs.realpath(hostPath(target, config.allowedRoot, config.hostRoot));
+  } catch {
+    throw new HttpError(400, "folder is outside the output volume");
+  }
+  const relative = path.posix.relative(root, host);
   if (!relative || relative.startsWith("..")) {
     throw new HttpError(400, "folder is outside the output volume");
   }
@@ -620,10 +626,14 @@ async function pointLink(target) {
   if (stat && !stat.isSymbolicLink()) {
     throw new HttpError(409, "the output link path is occupied by a real folder");
   }
-  const temporary = `${link}.tmp.${process.pid}`;
-  await fs.rm(temporary, { force: true });
+  const temporary = `${link}.tmp.${crypto.randomBytes(8).toString("hex")}`;
   await fs.symlink(relative, temporary, "dir");
-  await fs.rename(temporary, link);
+  try {
+    await fs.rename(temporary, link);
+  } catch (error) {
+    await fs.rm(temporary, { force: true });
+    throw error;
+  }
 }
 
 async function ensureLink() {
@@ -641,10 +651,13 @@ async function ensureLink() {
       throw error;
     }
   }
-  const host = hostPath(outputDir, config.allowedRoot, config.hostRoot);
-  await fs.mkdir(host, { recursive: true });
+  const root = await fs.realpath(config.hostRoot);
+  const host = await ensureFolder(
+    config.hostRoot,
+    hostPath(outputDir, config.allowedRoot, config.hostRoot),
+  );
   await pointLink(outputDir);
-  await removeLegacyLink(path.posix.relative(config.hostRoot, host));
+  await removeLegacyLink(path.posix.relative(root, host));
 }
 
 // Earlier versions used one link name for every package. Drop it once it is ours; another
@@ -723,19 +736,28 @@ async function ensureOutput(value, moveExisting) {
   if (target === outputDir) {
     return { ...(await status()), moved: [], skipped: [] };
   }
-  const host = hostPath(target, config.allowedRoot, config.hostRoot);
-  await fs.mkdir(host, { recursive: true });
-  const [realRoot, realTarget] = await Promise.all([
-    fs.realpath(config.hostRoot),
-    fs.realpath(host),
-  ]);
-  if (!isInside(realRoot, realTarget)) {
+  let host;
+  try {
+    host = await ensureFolder(
+      config.hostRoot,
+      hostPath(target, config.allowedRoot, config.hostRoot),
+    );
+  } catch {
     throw new HttpError(400, "folder escapes the allowed volume");
   }
 
   const previous = outputDir;
-  const previousHost = hostPath(previous, config.allowedRoot, config.hostRoot);
-  if (isInside(previousHost, host)) {
+  let previousHost;
+  try {
+    previousHost = await realFolder(
+      config.hostRoot,
+      hostPath(previous, config.allowedRoot, config.hostRoot),
+    );
+  } catch (error) {
+    if (error.code !== "ENOENT") throw new HttpError(400, "folder escapes the allowed volume");
+    previousHost = null;
+  }
+  if (previousHost && isInside(previousHost, host)) {
     throw new HttpError(400, "choose a folder outside the current output folder");
   }
 
@@ -770,6 +792,9 @@ async function ensureOutput(value, moveExisting) {
 async function moveEntries(from, to) {
   const moved = [];
   const skipped = [];
+  if (!from) {
+    return { moved, skipped };
+  }
   try {
     for (const entry of await fs.readdir(from)) {
       if (entry === config.outputLink) {

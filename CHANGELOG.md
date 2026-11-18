@@ -27,6 +27,9 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 - Revoking a user's access also closes that user's open WebSockets and discards one-time tokens
   that were not redeemed yet, so a removed privilege takes effect at once.
 - A malformed absolute request target no longer ends the bridge process; it answers `400`.
+- Changing the output folder no longer follows symlinks inside the share: missing folders are
+  created one component at a time, and the previous folder is resolved before anything is moved,
+  so the root bridge cannot be led outside the share.
 
 ## [0.3.0] - 2026-11-18
 
