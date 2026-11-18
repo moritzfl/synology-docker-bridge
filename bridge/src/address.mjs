@@ -6,7 +6,7 @@
 export function dsmAddress(host, secure, ownOrigin, ports, appId) {
   const scheme = secure ? "https" : "http";
   if (!ownOrigin) return `${scheme}://${host || "nas"}/`;
-  const name = /^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::\d+)?$/.exec(host || "")?.[1] || "nas";
+  const name = /^(\[[0-9A-Fa-f:.]+]|[A-Za-z0-9.-]+)(?::\d+)?$/.exec(host || "")?.[1] || "nas";
   const port = secure ? ports.https : ports.http;
   return `${scheme}://${name}:${port}/${appId ? `?launchApp=${encodeURIComponent(appId)}` : ""}`;
 }

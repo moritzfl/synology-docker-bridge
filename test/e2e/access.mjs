@@ -171,7 +171,7 @@ try {
   for (const folder of added) {
     // Remove only the entry this test added.
     const acl = guest(`synoacltool -get '${folder}'`);
-    const match = new RegExp(`\\[(\\d+)\\] user:${id}:allow:[^ ]+ \\(level:0\\)`).exec(acl);
+    const match = new RegExp(`\\[(\\d+)] user:${id}:allow:[^ ]+ \\(level:0\\)`).exec(acl);
     if (match) guest(`synoacltool -del '${folder}' ${match[1]}`);
   }
   await browser.close();

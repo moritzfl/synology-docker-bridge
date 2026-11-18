@@ -20,7 +20,7 @@ let end = lines.findIndex((line, index) => index > start && /^## \[/.test(line))
 if (end < 0) end = lines.length;
 const body = lines
   .slice(start + 1, end)
-  .filter((line) => !/^\[[^\]]+\]: /.test(line))
+  .filter((line) => !/^\[[^\]]+]: /.test(line))
   .join("\n")
   .trim();
 if (!body) {

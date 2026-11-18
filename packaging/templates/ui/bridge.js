@@ -29,7 +29,7 @@
   function t(key, values) {
     var text = STRINGS[key] || TEXTS.enu[key] || key;
     values = values || {};
-    return text.replace(/\{(\w+)\}/g, function (match, name) {
+    return text.replace(/\{(\w+)}/g, function (match, name) {
       if (name === "app") return NAME;
       if (name === "folder") return label();
       return name in values ? values[name] : match;

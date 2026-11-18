@@ -59,7 +59,7 @@ function scriptJson(value) {
 }
 
 function render(text, values) {
-  return text.replace(/\{\{([A-Za-z0-9_]+)\}\}/g, (_, key) => {
+  return text.replace(/\{\{([A-Za-z0-9_]+)}}/g, (_, key) => {
     if (!(key in values)) throw new Error(`missing template value: ${key}`);
     return String(values[key]);
   });

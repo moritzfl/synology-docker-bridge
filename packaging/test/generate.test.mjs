@@ -78,7 +78,7 @@ test("renders every template into valid scripts and JSON", () => {
       .readdirSync(target, { recursive: true })
       .filter((file) => fs.statSync(path.join(target, file)).isFile());
     for (const file of all) {
-      assert.doesNotMatch(read(file), /\{\{[A-Za-z]+\}\}/, `${file} has an unfilled value`);
+      assert.doesNotMatch(read(file), /\{\{[A-Za-z]+}}/, `${file} has an unfilled value`);
     }
   }
 });
@@ -136,19 +136,19 @@ test("apps that need the root of an address get ports of their own on DSM's ngin
   assert.deepEqual(resource["port-config"], { "protocol-file": "config/my-app.sc" });
   const server = read("config/server.bridge.conf");
   assert.match(server, /listen 4386;/);
-  assert.match(server, /listen \[::\]:4387 ssl;/);
+  assert.match(server, /listen \[::]:4387 ssl;/);
   assert.doesNotMatch(server, /ssl_certificate/, "DSM's default certificate applies");
   assert.match(server, /proxy_pass http:\/\/127\.0\.0\.1:\d+\/__proxy\/;/);
   assert.doesNotMatch(server, /X-Forwarded-Prefix/, "the app is at the root");
   assert.match(
     read("config/ports.sc"),
-    /\[my-app_https\]\ntitle="My App \(HTTPS\)"\ndst\.ports="4387\/tcp"/,
+    /\[my-app_https]\ntitle="My App \(HTTPS\)"\ndst\.ports="4387\/tcp"/,
   );
   const compose = read("compose.yml");
   assert.match(compose, /BRIDGE_OWN_ORIGIN: "true"/);
   assert.match(compose, /BRIDGE_SESSION_COOKIE: "dsm_bridge_session_my-app"/);
   assert.match(compose, /BRIDGE_APP_ID: "SYNO\.SDS\.MyApp\.Instance"/);
-  assert.match(read("ui/app.html"), /var OWN_PORTS = \{"http":4386,"https":4387\};/);
+  assert.match(read("ui/app.html"), /var OWN_PORTS = \{"http":4386,"https":4387};/);
 
   const plain = render(minimal);
   const plainResource = JSON.parse(plain.read("conf/resource"));
@@ -178,7 +178,7 @@ test("apps that need the root of an address get ports of their own on DSM's ngin
 
 test("a start command replaces the image's own, with $ kept literal for Compose", () => {
   const { read } = render({ ...minimal, command: ["/bin/sh", "-c", "echo $HOME && run"] });
-  assert.match(read("compose.yml"), /^ {4}command: \["\/bin\/sh","-c","echo \$\$HOME && run"\]$/m);
+  assert.match(read("compose.yml"), /^ {4}command: \["\/bin\/sh","-c","echo \$\$HOME && run"]$/m);
   assert.doesNotMatch(render(minimal).read("compose.yml"), /command:/);
   for (const bad of [[], "run.sh", [""], [1]]) {
     assert.throws(
@@ -213,14 +213,14 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
   );
   assert.match(
     read("ui/bridge.js"),
-    /var CONFIG_LABEL = \{"enu":"Settings","ger":"Einstellungen"\};/,
+    /var CONFIG_LABEL = \{"enu":"Settings","ger":"Einstellungen"};/,
   );
   execFileSync("sh", ["-n", path.join(render(minimal).target, "ui", "config.cgi")]);
   // DSM's AppWindow keeps its launch parameters in openConfig on every window.
   assert.doesNotMatch(read("ui/bridge.js"), /^\s+openConfig:/m);
 
   const plain = render({ ...minimal, configFile: "settings.json" });
-  assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_CHECK: "\[\]"/);
+  assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_CHECK: "\[]"/);
   assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_TIMEOUT_SECONDS: "600"/, "10 minutes");
   for (const timeout of [30, 7201, "1800", 90.5]) {
     assert.throws(
@@ -395,14 +395,14 @@ test("the bridge sees the data folder and the package's share links to check acc
   const compose = render(minimal).read("compose.yml");
   assert.match(
     compose,
-    /- \$\{APP_DATA_DIR:-\/var\/packages\/my-app\/shares\/my-app\}:\/run\/app-data/,
+    /- \$\{APP_DATA_DIR:-\/var\/packages\/my-app\/shares\/my-app}:\/run\/app-data/,
   );
   assert.match(compose, /- \/var\/packages\/my-app\/shares:\/run\/shares:ro/);
 });
 
 test("the app gets DSM's time zone unless it opts out, and an init only when asked", () => {
   const { read } = render(minimal);
-  assert.match(read("compose.yml"), /TZ: "\$\{APP_TZ:-Etc\/UTC\}"/);
+  assert.match(read("compose.yml"), /TZ: "\$\{APP_TZ:-Etc\/UTC}"/);
   assert.doesNotMatch(read("compose.yml"), /init: true/);
   assert.match(read("scripts/preinst"), /SYNOPKG_PKGINST_TEMP_DIR/);
   const custom = render({ ...minimal, hostTimezone: false, init: true }).read("compose.yml");
@@ -447,8 +447,8 @@ test("public paths get their own nginx location, the bridge's list and the app's
   assert.match(nginx, /proxy_pass http:\/\/127\.0\.0\.1:\d+\/__public\/;/);
   const compose = read("compose.yml");
   assert.match(compose, /BRIDGE_PUBLIC_PATHS: "\/media\/,\/oauth\/callback"/);
-  assert.match(compose, /APP_PUBLIC_URL: "\$\{APP_PUBLIC_URL:-\}"/);
-  assert.match(compose, /MY_URL: "\$\{APP_PUBLIC_URL:-\}"/);
+  assert.match(compose, /APP_PUBLIC_URL: "\$\{APP_PUBLIC_URL:-}"/);
+  assert.match(compose, /MY_URL: "\$\{APP_PUBLIC_URL:-}"/);
   assert.match(read("scripts/bridge-env"), /prefix="\/webman\/3rdparty\/my-app\/public"/);
   const none = render(minimal);
   assert.doesNotMatch(none.read("config/dsm.bridge.conf"), /public/);
