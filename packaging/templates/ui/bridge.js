@@ -1000,8 +1000,8 @@
         event.preventDefault();
         if (!folder) return;
         // While the shared folder itself is closed to the app, that is the permission to change.
-        var target = folder.share && !folder.shareOpen ? folder.share : folder.path;
-        self.openPermissions(target).then(function (dialog) {
+        var permissionPath = folder.share && !folder.shareOpen ? folder.share : folder.path;
+        self.openPermissions(permissionPath).then(function (dialog) {
           if (dialog) dialog.on("destroy", check);
         }).catch(function (error) {
           console.warn("permission dialog failed", error);
