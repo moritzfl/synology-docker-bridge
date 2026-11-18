@@ -13,6 +13,7 @@ import { loadConfig } from "./config.mjs";
 import { dropDsmCookies, onlyCookies, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
 import { parseUser, probe } from "./access.mjs";
 import { publicTarget } from "./public.mjs";
+import { requestUrl } from "./request-url.mjs";
 import { dsmAddress } from "./address.mjs";
 import { applyIdentity, dsmEmail, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
@@ -807,7 +808,11 @@ async function restart() {
 }
 
 async function handleControl(request, response) {
-  const url = new URL(request.url || "/", "http://localhost");
+  const url = requestUrl(request.url);
+  if (!url) {
+    sendJson(response, 400, { error: "bad request" });
+    return;
+  }
   if (request.method === "GET" && url.pathname === "/health") {
     sendJson(response, 200, { ok: true });
     return;
@@ -898,7 +903,11 @@ async function handleControl(request, response) {
 
 async function startControl(port) {
   const server = http.createServer((request, response) => {
-    const url = new URL(request.url || "/", "http://localhost");
+    const url = requestUrl(request.url);
+    if (!url) {
+      sendJson(response, 400, { error: "bad request" });
+      return;
+    }
     // DSM's same-origin nginx rule proxies /webman/3rdparty/<id>/proxy/ to the
     // fixed localhost control port, so the desktop window needs no extra port.
     if (url.pathname.startsWith("/__proxy/")) {
@@ -932,7 +941,11 @@ async function startControl(port) {
     socket.on("error", (error) => {
       log("debug", "websocket client error", { error: error.message });
     });
-    const url = new URL(request.url || "/", "http://localhost");
+    const url = requestUrl(request.url);
+    if (!url) {
+      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+      return;
+    }
     if (url.pathname.startsWith("/__proxy/")) {
       request.url = url.pathname.slice("/__proxy".length) + url.search;
       upgradeHandler(request, socket, head);

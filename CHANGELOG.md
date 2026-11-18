@@ -26,6 +26,7 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
   user could read it from `/proc`; it is passed on stdin.
 - Revoking a user's access also closes that user's open WebSockets and discards one-time tokens
   that were not redeemed yet, so a removed privilege takes effect at once.
+- A malformed absolute request target no longer ends the bridge process; it answers `400`.
 
 ## [0.3.0] - 2026-11-18
 
