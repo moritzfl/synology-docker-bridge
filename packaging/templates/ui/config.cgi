@@ -29,16 +29,15 @@ case "$PORT" in
 esac
 [ -n "$TOKEN" ] || json_error 500 bridge-token
 
-CURL="$(command -v curl 2>/dev/null || echo /usr/bin/curl)"
 if [ "${REQUEST_METHOD:-GET}" = POST ]; then
   # The check runs in the app's container and may take a while.
-  "$CURL" -sS --max-time 150 -o "$output" -X POST \
-    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  bridge_curl "$TOKEN" -sS --max-time 150 -o "$output" -X POST \
+    -H 'Content-Type: application/json' \
     --data-binary "@$input" "http://127.0.0.1:$PORT/config" 2>/dev/null || json_error 502 bridge
 else
   path=/config
   [ "$(query_get status)" = 1 ] && path=/config/status
-  "$CURL" -sS --max-time 30 -o "$output" -H "Authorization: Bearer $TOKEN" \
+  bridge_curl "$TOKEN" -sS --max-time 30 -o "$output" \
     "http://127.0.0.1:$PORT$path" 2>/dev/null || json_error 502 bridge
 fi
 case "$(head -c 1 "$output" 2>/dev/null)" in

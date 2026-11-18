@@ -52,6 +52,15 @@ json_string() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+# The control token authenticates as the package. Pass it to curl on stdin, never in its
+# arguments: /proc/<pid>/cmdline is readable by every local user.
+bridge_curl() {
+  _token="$1"
+  shift
+  printf 'header = "Authorization: Bearer %s"\n' "$_token" | \
+    "$(command -v curl 2>/dev/null || echo /usr/bin/curl)" --config - "$@"
+}
+
 # DSM hides the desktop icon from users without the app privilege, but these CGIs are reachable
 # by URL, so check the privilege here too. CGIs run as the package user, which may neither call
 # DSM's privilege API nor reuse the browser's DSM session (DSM ends a session used from another
@@ -110,8 +119,10 @@ full_name() {
 # Ends the user's open sessions in the app, so revoked access takes effect at once.
 revoke_sessions() {
   var="${SYNOPKG_PKGVAR:-/var/packages/{{id}}/var}"
-  "$(command -v curl 2>/dev/null || echo /usr/bin/curl)" -s --max-time 5 -X POST \
-    -H "Authorization: Bearer $(cat "$var/token" 2>/dev/null)" -H 'Content-Type: application/json' \
+  token="$(cat "$var/token" 2>/dev/null || true)"
+  [ -n "$token" ] || return 0
+  bridge_curl "$token" -s --max-time 5 -X POST \
+    -H 'Content-Type: application/json' \
     --data-binary "{\"user\":\"$(json_string "$user")\"}" \
     "http://127.0.0.1:$(cat "$var/bridge-port" 2>/dev/null)/revoke" >/dev/null 2>&1 || true
 }

@@ -25,12 +25,15 @@ case "$PORT" in
 esac
 [ -n "$TOKEN" ] || json_error 500 bridge-token
 
-CURL="$(command -v curl 2>/dev/null || echo /usr/bin/curl)"
+input="$VAR/settings.$$.in"
 tmp="$VAR/settings.$$.json"
-"$CURL" -sS --max-time 600 -o "$tmp" \
-  -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  --data-binary "$body" "http://127.0.0.1:$PORT/apply" 2>/dev/null || {
-    rm -f "$tmp"
+trap 'rm -f "$input" "$tmp"' EXIT
+umask 077
+printf '%s' "$body" >"$input"
+bridge_curl "$TOKEN" -sS --max-time 600 -o "$tmp" \
+  -X POST -H 'Content-Type: application/json' \
+  --data-binary "@$input" "http://127.0.0.1:$PORT/apply" 2>/dev/null || {
+    rm -f "$input" "$tmp"
     json_error 502 bridge
   }
 if [ ! -s "$tmp" ]; then

@@ -12,9 +12,8 @@ case "$PORT" in
 esac
 [ -n "$TOKEN" ] || json_error 500 bridge-token
 
-CURL="$(command -v curl 2>/dev/null || echo /usr/bin/curl)"
-out="$("$CURL" -sS --max-time 20 -X POST \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+out="$(bridge_curl "$TOKEN" -sS --max-time 20 -X POST \
+  -H 'Content-Type: application/json' \
   --data-binary "{\"user\":\"$(json_string "$user")\",\"groups\":$(json_groups),\"name\":\"$(json_string "$(full_name)")\"}" \
   "http://127.0.0.1:$PORT/session" 2>/dev/null)" || json_error 502 bridge
 printf 'Status: 200\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\n\r\n%s\n' "$out"

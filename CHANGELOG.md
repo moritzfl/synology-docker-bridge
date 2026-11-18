@@ -22,6 +22,8 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 - The bridge no longer follows symlinks that an app places in its data folder: the shared identity
   secret and the settings file are opened without following links and written under fresh random
   names, so the root bridge cannot be pointed at another file.
+- The control token no longer appears in the arguments of the CGIs' `curl` calls, where any local
+  user could read it from `/proc`; it is passed on stdin.
 
 ## [0.3.0] - 2026-11-18
 
