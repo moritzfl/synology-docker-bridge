@@ -265,6 +265,8 @@ app unusable:
   app's container, for apps that show a maintenance page while they set up.
 - **Undo**: if it does not, the bridge puts the previous file back and restarts the app again. The
   editor reopens with the administrator's text and what the app logged, so it can be fixed.
+  The bridge keeps the previous file with the package until then, so a restart of the bridge or
+  of the NAS in between does not leave behind a file the app cannot start with.
 - Someone else saving in the meantime is detected; the editor says so instead of overwriting.
 - The file is the app's own: it stays in the data folder across upgrades and can still be edited
   there directly, without the check.

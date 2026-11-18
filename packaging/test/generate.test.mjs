@@ -205,6 +205,11 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
   const ready = /BRIDGE_CONFIG_READY: (.*)$/m.exec(compose)[1];
   assert.deepEqual(JSON.parse(JSON.parse(ready)), ["probe", "--json"]);
   assert.match(
+    compose,
+    /BRIDGE_CONFIG_STATE: \/run\/bridge\/config-job\.json/,
+    "kept with the package",
+  );
+  assert.match(
     read("ui/bridge.js"),
     /var CONFIG_LABEL = \{"enu":"Settings","ger":"Einstellungen"\};/,
   );

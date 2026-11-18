@@ -66,6 +66,7 @@ services:
       BRIDGE_CONFIG_FILE: "{{configFile}}"
       BRIDGE_CONFIG_CHECK: {{configCheck}}
       BRIDGE_CONFIG_READY: {{configReady}}
+      BRIDGE_CONFIG_STATE: /run/bridge/config-job.json
       BRIDGE_UPDATES_IMAGE: "{{updatesImage}}"
       BRIDGE_UPDATES_CURRENT: "{{updatesCurrent}}"
       BRIDGE_UPDATES_URL: "{{updatesUrl}}"

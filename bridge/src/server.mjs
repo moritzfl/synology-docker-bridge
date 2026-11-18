@@ -82,6 +82,7 @@ const configFile =
         log,
         settleMs: config.configSettleSeconds * 1000,
         timeoutMs: config.configTimeoutSeconds * 1000,
+        stateFile: config.configStateFile,
       })
     : null;
 
@@ -962,6 +963,10 @@ async function main() {
     control: `127.0.0.1:${config.controlPort}`,
     target: `127.0.0.1:${config.internalPort}`,
   });
+
+  if (configFile) {
+    await configFile.resume();
+  }
 
   if (updates) {
     await updates.start();

@@ -26,7 +26,9 @@ export function versionOf(content) {
  * and stay up, the previous file is put back and the app restarted again, so a mistake in the
  * settings never leaves the app unusable.
  *
- * `dir` is the data folder as the bridge sees it, `containerDir` as the app sees it.
+ * `dir` is the data folder as the bridge sees it, `containerDir` as the app sees it. `stateFile`
+ * keeps a save the bridge is still watching, with the previous file, so a restart of the bridge
+ * (a crash, a reboot of the NAS) does not leave a file behind that the app cannot start with.
  */
 export function createConfigFile({
   dir,
@@ -42,9 +44,24 @@ export function createConfigFile({
   settleMs = 30_000,
   timeoutMs = 600_000,
   checkTimeoutMs = 60_000,
+  stateFile = "",
 }) {
   const target = path.posix.join(dir, file);
   let job = { state: "idle" };
+  // While the app restarts with a new file: what to put back ({ previous, stat, since }).
+  let pending = null;
+
+  /** Records the job, and while one is pending, the previous file, before anything else. */
+  async function remember(next, nextPending = pending) {
+    job = next;
+    pending = nextPending;
+    if (!stateFile) return;
+    try {
+      await fs.writeFile(stateFile, JSON.stringify({ job, pending }), { mode: 0o600 });
+    } catch (error) {
+      log("warn", "settings job could not be recorded", { error: error.message });
+    }
+  }
 
   async function current() {
     let stat;
@@ -152,22 +169,27 @@ export function createConfigFile({
     return healthy();
   }
 
-  async function apply(previous, stat) {
-    const since = Math.floor(Date.now() / 1000) - 1;
+  /**
+   * Restarts the app with the new file and watches it; `step` picks up where a restarted bridge
+   * left off: "watch" when the app was already restarted, "restore" when restoring had begun.
+   */
+  async function apply({ previous, stat, since }, step = "restart") {
     try {
-      if (await restartAndWait()) {
-        job = { ...job, state: "applied" };
-        log("info", "settings applied", { file });
-        return;
+      if (step !== "restore") {
+        if (step === "restart" ? await restartAndWait() : await healthy()) {
+          await remember({ ...job, state: "applied" }, null);
+          log("info", "settings applied", { file });
+          return;
+        }
+        const output = await docker.logs(container, { since, tail: 60 }).catch(() => "");
+        await remember({ ...job, state: "restoring", log: output.trim().slice(-8000) });
+        log("warn", "app did not start with the new settings; restoring", { file });
       }
-      const output = await docker.logs(container, { since, tail: 60 }).catch(() => "");
-      job = { ...job, state: "restoring", log: output.trim().slice(-8000) };
-      log("warn", "app did not start with the new settings; restoring", { file });
       await write(previous, stat);
-      job = { ...job, state: (await restartAndWait()) ? "restored" : "failed" };
+      await remember({ ...job, state: (await restartAndWait()) ? "restored" : "failed" }, null);
     } catch (error) {
       log("warn", "settings could not be applied", { error: error.message });
-      job = { ...job, state: "failed", log: job.log || error.message };
+      await remember({ ...job, state: "failed", log: job.log || error.message }, null);
     }
   }
 
@@ -186,6 +208,23 @@ export function createConfigFile({
 
     status() {
       return job;
+    },
+
+    /** After a restart of the bridge: sees through a save it was still watching. */
+    async resume() {
+      if (!stateFile) return;
+      let saved;
+      try {
+        saved = JSON.parse(await fs.readFile(stateFile, "utf8"));
+      } catch {
+        return;
+      }
+      if (!saved?.job?.state) return;
+      job = saved.job;
+      if (!saved.pending || !["restarting", "restoring"].includes(job.state)) return;
+      pending = saved.pending;
+      log("info", "watching the app with the new settings again", { file });
+      apply(pending, job.state === "restoring" ? "restore" : "watch");
     },
 
     /** Checks and saves `content`, then restarts the app in the background; see status(). */
@@ -209,10 +248,23 @@ export function createConfigFile({
         job = { state: "idle" };
         return { ok: false, problem: result.output || "check failed" };
       }
-      await write(content, stat);
-      job = { state: "restarting", notes: result.output, version: versionOf(content) };
+      const restore = {
+        previous: before,
+        stat: stat && { mode: stat.mode, uid: stat.uid, gid: stat.gid },
+        since: Math.floor(Date.now() / 1000) - 1,
+      };
+      await remember(
+        { state: "restarting", notes: result.output, version: versionOf(content) },
+        restore,
+      );
+      try {
+        await write(content, stat);
+      } catch (error) {
+        await remember({ state: "idle" }, null);
+        throw error;
+      }
       log("info", "settings saved; restarting the app", { file });
-      apply(before, stat);
+      apply(restore);
       return { ok: true, notes: result.output, version: versionOf(content) };
     },
   };

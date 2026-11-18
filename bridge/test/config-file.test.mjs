@@ -201,3 +201,80 @@ test("with a ready command, an app that only shows a maintenance page is not up 
   assert.equal((await settled(config)).state, "applied");
   assert.deepEqual(readyCalls[0], ["python", "ready.py"]);
 });
+
+/** The same file and app, as seen by a bridge started afresh. */
+function restartedBridge(dir, docker, stateFile) {
+  return createConfigFile({
+    dir,
+    file: "settings.py",
+    docker,
+    container: "app",
+    reachable: async () => true,
+    pollMs: 5,
+    settleMs: 40,
+    timeoutMs: 3000,
+    stateFile,
+  });
+}
+
+test("a bridge restarted while watching a save restores a file the app did not start with", async () => {
+  const { dir, docker, read } = setup({ noCheck: true });
+  const stateFile = path.join(dir, "job.json");
+  const first = restartedBridge(dir, docker, stateFile);
+  const restart = docker.restart;
+  docker.restart = () => new Promise(() => {}); // the first bridge never gets past the restart
+  await first.save({ content: "DATABASES = broken\n", version: versionOf(read()) });
+  assert.equal(read(), "DATABASES = broken\n");
+  const kept = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+  assert.equal(kept.pending.previous, "DEBUG = False\n", "the previous file is kept first");
+  assert.equal(fs.statSync(stateFile).mode & 0o777, 0o600);
+
+  docker.restart = restart;
+  docker.dying = Date.now() + 10; // the app keeps failing with the new file
+  const second = restartedBridge(dir, docker, stateFile);
+  await second.resume();
+  const job = await settled(second);
+  assert.equal(job.state, "restored");
+  assert.equal(read(), "DEBUG = False\n");
+  assert.equal(JSON.parse(fs.readFileSync(stateFile, "utf8")).pending, null);
+
+  const third = restartedBridge(dir, docker, stateFile);
+  const restarts = docker.restarts;
+  await third.resume();
+  assert.equal(third.status().state, "restored", "the outcome is still there for the window");
+  assert.equal(docker.restarts, restarts, "nothing is done twice");
+});
+
+test("a bridge restarted while watching a save keeps it when the app stays up", async () => {
+  const { dir, docker, read } = setup({ noCheck: true });
+  const stateFile = path.join(dir, "job.json");
+  const first = restartedBridge(dir, docker, stateFile);
+  const restart = docker.restart;
+  docker.restart = () => new Promise(() => {});
+  await first.save({ content: "DEBUG = True\n", version: versionOf(read()) });
+  docker.restart = restart;
+  const second = restartedBridge(dir, docker, stateFile);
+  await second.resume();
+  assert.equal((await settled(second)).state, "applied");
+  assert.equal(read(), "DEBUG = True\n");
+  assert.equal(docker.restarts, 0, "the app was already restarting; it is only watched");
+});
+
+test("a bridge restarted while restoring finishes restoring", async () => {
+  const { dir, docker, read } = setup({ noCheck: true });
+  const stateFile = path.join(dir, "job.json");
+  fs.writeFileSync(path.join(dir, "settings.py"), "DATABASES = broken\n");
+  fs.writeFileSync(
+    stateFile,
+    JSON.stringify({
+      job: { state: "restoring", log: "Traceback" },
+      pending: { previous: "DEBUG = False\n", stat: null, since: 0 },
+    }),
+  );
+  const bridge = restartedBridge(dir, docker, stateFile);
+  await bridge.resume();
+  const job = await settled(bridge);
+  assert.equal(job.state, "restored");
+  assert.equal(job.log, "Traceback");
+  assert.equal(read(), "DEBUG = False\n");
+});
