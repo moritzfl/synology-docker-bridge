@@ -158,10 +158,10 @@
 
       function api(path, options) {
         options = options || {};
-        var headers = { "X-SynoToken": token };
+        var headers = { "X-SYNO-TOKEN": token };
         if (options.body) headers["Content-Type"] = "application/json";
-        var url = path + (path.indexOf("?") >= 0 ? "&" : "?") + "SynoToken=" + encodeURIComponent(token);
-        return fetch(url, {
+          // The token travels in the header, not in the URL, so it stays out of access logs.
+        return fetch(path, {
           method: options.method || "GET",
           headers: headers,
           body: options.body ? JSON.stringify(options.body) : undefined,

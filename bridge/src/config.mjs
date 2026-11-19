@@ -35,12 +35,16 @@ export function loadConfig(env = process.env) {
   const tokenFile = env.BRIDGE_TOKEN_FILE || "/run/bridge/token";
   const token =
     env.BRIDGE_TOKEN || (fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, "utf8").trim() : "");
+  const container = env.BRIDGE_CONTAINER || env.BRIDGE_SERVICE || "app";
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(container)) {
+    throw new Error("BRIDGE_CONTAINER must be a Docker container name");
+  }
   return {
     token,
     tokenFile,
     controlPort: integer(env.BRIDGE_CONTROL_PORT, 8799),
     dockerSocket: env.BRIDGE_DOCKER_SOCKET || "/var/run/docker.sock",
-    container: env.BRIDGE_CONTAINER || env.BRIDGE_SERVICE || "app",
+    container,
     envFile: env.BRIDGE_ENV_FILE || "/compose/.env",
     stateEnvFile: env.BRIDGE_STATE_ENV || "",
     outputKey: env.BRIDGE_OUTPUT_KEY || "APP_OUTPUT_DIR",
@@ -57,6 +61,7 @@ export function loadConfig(env = process.env) {
     appTitle: env.BRIDGE_APP_TITLE || "Docker app",
     appPath: env.BRIDGE_APP_PATH || "/",
     authMode: env.BRIDGE_AUTH || "token",
+    allowedOrigins: list(env.BRIDGE_ALLOWED_ORIGINS),
     output: env.BRIDGE_OUTPUT !== "false",
     oneTimeSeconds: integer(env.BRIDGE_ONE_TIME_SECONDS, 60),
     sessionSeconds: integer(env.BRIDGE_SESSION_SECONDS, 28800),
@@ -78,6 +83,7 @@ export function loadConfig(env = process.env) {
     // The app is at the root of an address of its own (webPorts) rather than under DSM's.
     ownOrigin: env.BRIDGE_OWN_ORIGIN === "true",
     sessionCookie: env.BRIDGE_SESSION_COOKIE || "dsm_bridge_session",
+    sessionCookieBase: env.BRIDGE_SESSION_COOKIE_BASE || "dsm_bridge_session",
     appId: env.BRIDGE_APP_ID || "",
     dsmHttpPort: integer(env.BRIDGE_DSM_HTTP_PORT, 5000),
     dsmHttpsPort: integer(env.BRIDGE_DSM_HTTPS_PORT, 5001),

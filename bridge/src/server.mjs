@@ -8,7 +8,7 @@ import { createAuthenticator } from "./auth.mjs";
 import { ConfigError, createConfigFile } from "./config-file.mjs";
 import { createUpdates } from "./updates.mjs";
 import { loadConfig } from "./config.mjs";
-import { dropDsmCookies, onlyCookies, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
+import { dropDsmCookies, publicCookieHeader, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
 import { probe, resolveUser } from "./access.mjs";
 import { publicTarget } from "./public.mjs";
 import { requestUrl } from "./request-url.mjs";
@@ -16,8 +16,10 @@ import { dsmAddress } from "./address.mjs";
 import { applyIdentity, dsmEmail, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
-import { writePrivateFile } from "./private-file.mjs";
+import { applyFraming, frameAncestors } from "./framing.mjs";
 import { pruneSuperseded } from "./images.mjs";
+import { writePrivateFile } from "./private-file.mjs";
+import { crossSite, sameOrigin, unsafeMethod } from "./origin.mjs";
 import { ensureFolder, hostPath, isInside, normalizeDirectory, realFolder } from "./validate.mjs";
 
 const config = loadConfig();
@@ -101,34 +103,21 @@ const proxy = httpProxy.createProxyServer({
   xfwd: true,
 });
 
-function stripFrameHeaders(headers, prefix = "") {
-  delete headers["x-frame-options"];
+function stripFrameHeaders(headers, prefix = "", request = null) {
   if (prefix && headers.location && String(headers.location).startsWith("/")) {
     const location = String(headers.location);
     if (!location.startsWith(`${prefix}/`)) {
       headers.location = `${prefix}${location}`;
     }
   }
-  for (const name of ["content-security-policy", "content-security-policy-report-only"]) {
-    const value = headers[name];
-    if (!value) continue;
-    const cleaned = String(value)
-      .split(";")
-      .map((part) => part.trim())
-      .filter((part) => part && !part.toLowerCase().startsWith("frame-ancestors"))
-      .join("; ");
-    if (cleaned) headers[name] = cleaned;
-    else delete headers[name];
-  }
+  applyFraming(headers, frameAncestors(config, request?.headers.host));
 }
 
 proxy.on("proxyRes", (proxyResponse, request) => {
-  stripFrameHeaders(proxyResponse.headers, request._bridgePrefix || "");
+  stripFrameHeaders(proxyResponse.headers, request._bridgePrefix || "", request);
   scopeCookies(proxyResponse.headers, request._bridgePrefix || "");
-  if (config.ownOrigin) {
-    const dropped = dropDsmCookies(proxyResponse.headers);
-    if (dropped.length) log("warn", "app cookies named like DSM's were dropped", { dropped });
-  }
+  const dropped = dropDsmCookies(proxyResponse.headers, config.sessionCookieBase);
+  if (dropped.length) log("warn", "app cookies named like DSM's were dropped", { dropped });
 });
 
 /**
@@ -138,7 +127,11 @@ proxy.on("proxyRes", (proxyResponse, request) => {
  */
 function makeAnonymous(request) {
   applyIdentity(request.headers, null, false);
-  const cookie = onlyCookies(request.headers.cookie, config.publicCookies);
+  const cookie = publicCookieHeader(
+    request.headers.cookie,
+    config.publicCookies,
+    config.sessionCookieBase,
+  );
   if (cookie) {
     request.headers.cookie = cookie;
   } else {
@@ -317,7 +310,7 @@ function appReachable() {
   });
 }
 
-async function status() {
+async function status(admin = false) {
   let container = null;
   try {
     container = await inspectContainer(config.container);
@@ -325,18 +318,23 @@ async function status() {
     log("debug", "container inspect failed", { error: error.message });
   }
   const running = container?.state === "running";
+  const update = admin && updates ? updates.status() : null;
   return {
     app: config.appTitle,
     framework: config.frameworkVersion,
-    container: config.container,
     state: container?.state || "missing",
     health: container?.health || "",
     reachable: running ? await appReachable() : false,
-    image: container?.image || "",
-    internalPort: config.internalPort,
+    ...(admin
+      ? {
+          container: config.container,
+          image: container?.image || "",
+          internalPort: config.internalPort,
+        }
+      : {}),
     path: config.appPath,
-    ...(updates ? { update: updates.status() } : {}),
-    ...(config.output
+    ...(update ? { update } : {}),
+    ...(config.output && admin
       ? {
           outputParent: config.allowedRoot,
           outputDir,
@@ -428,6 +426,21 @@ function forwardedPrefix(request) {
   return String(request.headers["x-forwarded-prefix"] || "").replace(/\/+$/, "");
 }
 
+function proxyOriginAllowed(request) {
+  const { origin, host } = request.headers;
+  if (!origin && (crossSite(request.headers) || request.headers["sec-fetch-site"] === "same-site"))
+    return false;
+  return sameOrigin(origin, host, isSecure(request) ? "https" : "http", config.allowedOrigins);
+}
+
+function refuseCrossSite(response) {
+  response.writeHead(403, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  response.end("Cross-site request refused.\n");
+}
+
 function redirectLocation(request) {
   return `${forwardedPrefix(request)}${config.appPath}`;
 }
@@ -513,6 +526,14 @@ async function publicHandler(request, response) {
       unauthorized(response, request);
       return;
     }
+    if (
+      config.authMode !== "none" &&
+      unsafeMethod(request.method) &&
+      !proxyOriginAllowed(request)
+    ) {
+      refuseCrossSite(response);
+      return;
+    }
     if (config.identityHeaders && identity.user && !identitySecretReady) {
       await prepareSecret();
       if (!identitySecretReady) return sendJson(response, 503, { error: "identity-not-ready" });
@@ -575,6 +596,10 @@ async function upgradeHandler(request, socket, head) {
         return;
       }
       socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+      return;
+    }
+    if (config.authMode !== "none" && !proxyOriginAllowed(request)) {
+      socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
       return;
     }
     if (config.identityHeaders && identity.user && !identitySecretReady) {
@@ -830,7 +855,7 @@ async function exists(file) {
 async function restart() {
   await docker.restart(config.container);
   log("info", "application restarted", { container: config.container });
-  return status();
+  return status(true);
 }
 
 async function handleControl(request, response) {
@@ -848,7 +873,7 @@ async function handleControl(request, response) {
     return;
   }
   if (request.method === "GET" && url.pathname === "/status") {
-    sendJson(response, 200, await status());
+    sendJson(response, 200, await status(url.searchParams.get("admin") === "1"));
     return;
   }
   if (request.method === "GET" && url.pathname === "/access") {
@@ -921,7 +946,7 @@ async function handleControl(request, response) {
     if (body.outputDir) {
       await ensureOutput(body.outputDir, body.moveExisting !== false);
     }
-    sendJson(response, 200, await status());
+    sendJson(response, 200, await status(true));
     return;
   }
   sendJson(response, 404, { error: "not found" });

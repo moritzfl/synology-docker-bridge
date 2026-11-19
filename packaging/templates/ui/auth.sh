@@ -37,7 +37,7 @@ require_user() {
   fi
   user=$(/usr/syno/synoman/webman/modules/authenticate.cgi 2>/dev/null | tr -d '\r\n')
   [ -n "$user" ] || json_error 401 auth
-  token="${HTTP_X_SYNO_TOKEN:-}"
+  token="${HTTP_X_SYNO_TOKEN:-${HTTP_X_SYNOTOKEN:-}}"
   if [ -z "$token" ]; then
     token=$(query_get SynoToken)
   fi

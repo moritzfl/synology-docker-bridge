@@ -107,13 +107,12 @@
   function api(path, options) {
     options = options || {};
     var headers = options.headers || {};
-    headers["X-SynoToken"] = token;
+    headers["X-SYNO-TOKEN"] = token;
     if (options.body) {
       headers["Content-Type"] = "application/json";
     }
-    var url = path + (path.indexOf("?") >= 0 ? "&" : "?")
-      + "SynoToken=" + encodeURIComponent(token);
-    return fetch(url, {
+    // The token travels in the header, not in the URL, so it stays out of access logs.
+    return fetch(path, {
       method: options.method || "GET",
       headers: headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
@@ -148,7 +147,12 @@
   }
 
   function escapeHtml(value) {
-    return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   function isAdmin() {

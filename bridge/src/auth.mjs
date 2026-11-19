@@ -1,3 +1,4 @@
+import { SESSION_COOKIE_BASE, withoutBridgeCookies } from "./cookies.mjs";
 import crypto from "node:crypto";
 
 /**
@@ -173,14 +174,7 @@ export function createAuthenticator(config) {
 
     /** Drops every bridge session cookie, also other packages' on the same host. */
     stripCookies(cookie) {
-      if (!cookie) {
-        return cookie;
-      }
-      return cookie
-        .split(";")
-        .map((part) => part.trim())
-        .filter((part) => part && !/^dsm_bridge_session(_[a-z0-9-]+)?=/.test(part))
-        .join("; ");
+      return withoutBridgeCookies(cookie, config.sessionCookieBase || SESSION_COOKIE_BASE);
     },
 
     cookie(session, secure = false, path = "/") {

@@ -43,9 +43,9 @@ try {
   await launch(page, app);
   await waitForApp(page, id, log, "open", 900);
   const access = await wrapperFrame(page, id).evaluate(async () => {
-    const token = new URLSearchParams(location.search).get("SynoToken");
-    const response = await fetch(`access.cgi?SynoToken=${encodeURIComponent(token)}`, {
-      headers: { "X-SynoToken": token },
+    const token = window.parent._S("SynoToken");
+    const response = await fetch("access.cgi", {
+      headers: { "X-SYNO-TOKEN": token },
     });
     return response.json();
   });

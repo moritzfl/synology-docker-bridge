@@ -39,18 +39,18 @@ try {
   await waitForApp(page, id, log, "open", 900);
   await page.screenshot({ path: shot("1-open") });
   const status = await wrapperFrame(page, id).evaluate(async () => {
-    const token = new URLSearchParams(location.search).get("SynoToken");
-    const response = await fetch(`status.cgi?SynoToken=${encodeURIComponent(token)}`, {
-      headers: { "X-SynoToken": token },
+    const token = window.parent._S("SynoToken");
+    const response = await fetch("status.cgi", {
+      headers: { "X-SYNO-TOKEN": token },
     });
     return response.json();
   });
   const hasOutput = "outputDir" in status;
   // Apps running as the package user also offer Folder access, so they get the Manage menu too.
   const access = await wrapperFrame(page, id).evaluate(async () => {
-    const token = new URLSearchParams(location.search).get("SynoToken");
-    const response = await fetch(`access.cgi?SynoToken=${encodeURIComponent(token)}`, {
-      headers: { "X-SynoToken": token },
+    const token = window.parent._S("SynoToken");
+    const response = await fetch("access.cgi", {
+      headers: { "X-SYNO-TOKEN": token },
     });
     return response.json();
   });
