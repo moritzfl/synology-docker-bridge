@@ -457,6 +457,35 @@ test("on ports of its own, public paths are served at the root, keeping only lis
   }
 });
 
+test("host-network apps, nginx and CGI use the same ports before and after installation", () => {
+  const { target, read } = render({ ...minimal, networkMode: "host" });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "internal-port-"));
+  fs.mkdirSync(path.join(target, "docker"));
+  const env = path.join(target, "docker", ".env");
+  fs.writeFileSync(env, "");
+  execFileSync(
+    "sh",
+    [
+      "-c",
+      '. "$1"; configure_ports; record_ports; ensure_env; save_env',
+      "sh",
+      path.join(target, "scripts", "bridge-env"),
+    ],
+    {
+      encoding: "utf8",
+      env: { ...process.env, SYNOPKG_PKGVAR: dir, SYNOPKG_PKGDEST: target },
+    },
+  );
+  const port = fs.readFileSync(path.join(dir, "internal-port"), "utf8").trim();
+  const control = fs.readFileSync(path.join(dir, "bridge-port"), "utf8").trim();
+  assert.ok(Number(port) >= 20000 && Number(port) < 30000);
+  assert.ok(Number(control) >= 30000 && Number(control) < 40000);
+  assert.ok(read("docker/.env").includes(`APP_CONTAINER_PORT=${port}\n`));
+  assert.ok(read("docker/.env").includes(`APP_INTERNAL_PORT=${port}\n`));
+  assert.ok(read("config/dsm.bridge.conf").includes(`127.0.0.1:${control}/`));
+  assert.equal(fs.statSync(env).mode & 0o777, 0o600);
+});
+
 test("DSM's own ports are read from its nginx config for the way back from the app's ports", () => {
   const { target } = render(minimal);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-port-"));

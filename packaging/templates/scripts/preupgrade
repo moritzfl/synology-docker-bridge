@@ -3,6 +3,6 @@ set -eu
 . "$(dirname "$0")/bridge-env"
 
 if [ -f "$ENV_FILE" ]; then
-    cp "$ENV_FILE" "$STATE_ENV"
+    save_env
 fi
 exit 0

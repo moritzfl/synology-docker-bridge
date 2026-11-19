@@ -11,6 +11,7 @@ fi
 PACKAGED_ENV="${SYNOPKG_PKGINST_TEMP_DIR:-}/docker/.env"
 if [ -n "${SYNOPKG_PKGINST_TEMP_DIR:-}" ] && [ -f "$PACKAGED_ENV" ]; then
     ENV_FILE="$PACKAGED_ENV"
+    configure_ports
     set_env APP_TZ "$(host_timezone)"
     set_env APP_PUBLIC_URL "$(public_url)"
     set_env DSM_HTTP_PORT "$(dsm_port http)"

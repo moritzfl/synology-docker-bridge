@@ -1,5 +1,7 @@
 #!/bin/sh
 set -eu
 VAR="${SYNOPKG_PKGVAR:-/var/packages/{{id}}/var}"
-rm -f "$VAR/token" "$VAR/bridge-port"
+if [ "${SYNOPKG_PKG_STATUS:-}" != UPGRADE ]; then
+    rm -f "$VAR/token" "$VAR/bridge-port" "$VAR/internal-port"
+fi
 exit 0
