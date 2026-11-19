@@ -73,10 +73,12 @@
     },
     "container": {
       "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
       "description": "Container name; defaults to id."
     },
     "service": {
       "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
       "default": "app"
     },
     "containerPort": {
@@ -97,6 +99,7 @@
     },
     "appPath": {
       "type": "string",
+      "pattern": "^/[A-Za-z0-9._~/-]*$",
       "default": "/",
       "description": "Web path of the app's UI."
     },
@@ -112,7 +115,7 @@
     "publicCookies": {
       "type": "array",
       "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
-      "description": "The app's own cookies that visitors without a session keep on publicPaths, e.g. a CSRF cookie. All other cookies, the app's login cookie among them, are removed there."
+      "description": "The app's own cookies that visitors without a session keep on publicPaths, e.g. a CSRF cookie. DSM sign-in cookies and bridge session cookies are always removed and cannot be listed."
     },
     "webPorts": {
       "type": "object",
@@ -187,8 +190,9 @@
             },
             "url": {
               "type": "string",
+              "pattern": "^https://",
               "format": "uri",
-              "description": "Where administrators download the new package, e.g. the project's latest release."
+              "description": "Where administrators download the new package over HTTPS, e.g. the project's latest release."
             }
           }
         }
@@ -212,13 +216,20 @@
     },
     "appEnv": {
       "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
       "additionalProperties": {
         "type": ["string", "number", "boolean"]
       }
     },
     "dataDir": {
       "type": "string",
-      "description": "Host folder mounted at /data; defaults to the package's own share, on whichever volume."
+      "pattern": "^/[A-Za-z0-9._/-]+$",
+      "description": "Host folder mounted at /data; defaults to the package's own share. A path outside that share needs allowHostPaths: true."
+    },
+    "allowHostPaths": {
+      "type": "boolean",
+      "default": false,
+      "description": "Explicitly allow dataDir outside the package's own share. The installer is trusting the package with that host folder."
     },
     "output": {
       "type": "boolean",
@@ -255,16 +266,31 @@
     },
     "outputSubdir": {
       "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
       "description": "First folder inside the share; defaults to id."
+    },
+    "outputLink": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "Name of the per-package link in the output share; defaults to .<id>-folder."
     },
     "allUsers": {
       "type": "boolean",
       "default": false,
       "description": "true: every DSM user may open the app without an Application Privileges entry."
     },
+    "appAuthenticatesRequests": {
+      "type": "boolean",
+      "description": "Required acknowledgement for authMode none: the app authenticates requests itself."
+    },
     "authMode": {
       "enum": ["token", "none"],
       "default": "token"
+    },
+    "allowedOrigins": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Additional exact browser origins allowed to send authenticated writes or WebSocket upgrades."
     },
     "identityHeaders": {
       "type": "boolean",
@@ -293,18 +319,21 @@
       "type": "object",
       "properties": {
         "width": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
         },
         "height": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
         }
       },
       "additionalProperties": false
     },
     "outputShare": {
       "type": "string",
-      "default": "music",
-      "description": "Shared folder the folder lives in. DSM creates it when missing (an existing share keeps its permissions) and the package finds it on any volume."
+      "description": "Shared output folder. Defaults to <id>-output. DSM creates it if missing."
     }
   },
   "additionalProperties": false,

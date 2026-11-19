@@ -71,6 +71,39 @@ test("rejects configs that would build a broken package", () => {
   );
 });
 
+test("rejects values that would inject YAML, paths or UI script", () => {
+  for (const [field, value, pattern] of [
+    ["version", '1.0.0"\n', /version/],
+    ["container", "app}\n    volumes:\n      - /:/host", /container/],
+    ["service", "app\n  evil", /service/],
+    ["image", 'app"', /image/],
+    ["dataDir", "/", /dataDir/],
+    ["dataDir", "/etc", /dataDir/],
+    ["dataDir", "/volume1/homes", /allowHostPaths/],
+    ["outputShare", "homes", /outputShare/],
+    ["outputSubdir", "../outside", /outputSubdir/],
+    ["outputLink", "../outside", /outputLink/],
+    ["outputContainerRoot", "/../etc", /outputContainerRoot/],
+    ["outputHostRoot", "/app", /outputHostRoot/],
+    ["sessionSeconds", '1"\ninvalid', /sessionSeconds/],
+    ["authMode", "none", /appAuthenticatesRequests/],
+    ["appPath", '/";alert(1)//', /appPath/],
+    ["appEnv", { "A B": "x" }, /appEnv/],
+    ["ui", { width: '1000"), pwn: (globalThis.x=1), dummy: ("' }, /ui\.width/],
+  ]) {
+    assert.throws(() => resolve({ ...minimal, [field]: value }, here), pattern, String(value));
+  }
+  assert.equal(
+    resolve({ ...minimal, dataDir: "/volume1/apps/my-app", allowHostPaths: true }, here).config
+      .dataDir,
+    "/volume1/apps/my-app",
+  );
+  assert.equal(
+    resolve({ ...minimal, authMode: "none", appAuthenticatesRequests: true }, here).values.authMode,
+    "none",
+  );
+});
+
 test("renders every template into valid scripts and JSON", () => {
   for (const raw of [
     minimal,
@@ -135,11 +168,21 @@ test("the output share is declared, so DSM creates it when missing, and mounted 
   const shares = JSON.parse(read("conf/resource"))["data-share"].shares;
   assert.deepEqual(
     shares.map((share) => share.name),
-    ["my-app", "music"],
+    ["my-app", "my-app-output"],
   );
   assert.deepEqual(shares[1].permission, {}, "an existing share's permissions are left alone");
-  assert.match(read("compose.yml"), /- \/var\/packages\/my-app\/shares\/music:\/output-parent/);
-  assert.equal(values.defaultOutputDir, "/volume1/music/my-app");
+  assert.match(
+    read("compose.yml"),
+    /- \/var\/packages\/my-app\/shares\/my-app-output:\/output-parent/,
+  );
+  assert.equal(values.defaultOutputDir, "/volume1/my-app-output/my-app");
+  for (const outputShare of ["photo", "video", "manuscripts"]) {
+    assert.equal(resolve({ ...minimal, outputShare }, here).values.outputShare, outputShare);
+  }
+  assert.equal(
+    resolve({ ...minimal, defaultOutputDir: "/volume1/music/capture" }, here).values.outputShare,
+    "music",
+  );
   const legacy = resolve(
     { ...minimal, outputParent: "/volume1/audio", defaultOutputDir: "/volume1/audio/rec" },
     here,
@@ -321,6 +364,7 @@ test("update checks name the published image and where to get the package", () =
   for (const bad of [
     { ...minimal, image: "my-app:spk", updates: true },
     { ...minimal, image: "org/app:1.0", updates: { url: "javascript:alert(1)" } },
+    { ...minimal, image: "org/app:1.0", updates: { url: "http://example.com/app.spk" } },
     { ...minimal, image: "org/app:1.0", updates: [] },
   ]) {
     assert.throws(() => resolve(bad, here), /updates/, JSON.stringify(bad.updates));
@@ -344,6 +388,8 @@ test("files the package brings are mounted read-only into the unmodified image",
     { "/dir/": "a" },
     { "/a/../b": "a" },
     { "/a": "" },
+    { "/data/x": "../outside" },
+    { "/data/x": "/etc/passwd" },
     ["/a"],
   ]) {
     assert.throws(() => resolve({ ...minimal, files: bad }, here), /files/, JSON.stringify(bad));
@@ -396,6 +442,18 @@ test("on ports of its own, public paths are served at the root, keeping only lis
   assert.match(render(minimal).read("compose.yml"), /BRIDGE_PUBLIC_COOKIES: ""/);
   for (const bad of ["csrftoken", ["a b"], ["x;y"]]) {
     assert.throws(() => resolve({ ...minimal, publicCookies: bad }, here), /publicCookies/);
+  }
+  for (const name of [
+    "id",
+    "_SSID",
+    "[REDACTED:known:f5c3aebe2e91]",
+    "[REDACTED:known:f5c3aebe2e91]_other-app",
+  ]) {
+    assert.throws(
+      () => resolve({ ...minimal, publicCookies: [name] }, here),
+      /publicCookies/,
+      name,
+    );
   }
 });
 

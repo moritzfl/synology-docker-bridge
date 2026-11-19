@@ -548,7 +548,7 @@
       // The chooser cannot be limited to one share, so say where the folder must be, start the
       // chooser there, and reject anything else next to the field instead of after Save.
       var outputField = new TextField({
-        value: status.outputDir || "{{defaultOutputDir}}",
+        value: status.outputDir || "{{defaultOutputDirJson}}",
         width: 340,
         allowBlank: false,
         validator: function (value) {

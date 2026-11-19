@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { protectedCookie } from "../bridge/src/cookies.mjs";
+import { Script } from "node:vm";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.dirname(here);
@@ -59,6 +61,50 @@ function required(config, key) {
  */
 function scriptJson(value) {
   return JSON.stringify(JSON.stringify(value)).slice(1, -1).replace(/</g, "\\u003c");
+}
+
+/** Whether `child` is a real path inside `parent` (not the directory itself). */
+function insideDir(parent, child) {
+  const relative = path.relative(parent, child);
+  return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+/** A regular, non-symlinked file inside the app directory, or an error. */
+function safeFile(appDir, file) {
+  const root = fs.realpathSync(appDir);
+  const real = fs.realpathSync(file);
+  if (
+    fs.lstatSync(file).isSymbolicLink() ||
+    !insideDir(root, real) ||
+    !fs.statSync(real).isFile()
+  ) {
+    throw new Error(`file must stay inside the app directory: ${file}`);
+  }
+  return real;
+}
+
+/** Parses the generated UI scripts without running them, so config values cannot inject code. */
+function validateUiScripts(target) {
+  for (const file of ["ui/bridge.js", "ui/app.html"]) {
+    const source = fs.readFileSync(path.join(target, file), "utf8");
+    const scripts = file.endsWith(".html")
+      ? [...source.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1])
+      : [source];
+    for (const script of scripts) new Script(script, { filename: file });
+  }
+}
+
+// Compose validates both YAML and the service model without contacting a Docker engine.
+function validateCompose(target) {
+  execFileSync("docker", [
+    "compose",
+    "-p",
+    "bridge-check",
+    "-f",
+    path.join(target, "compose.yml"),
+    "config",
+    "--quiet",
+  ]);
 }
 
 function render(text, values) {
@@ -135,6 +181,7 @@ function copyIcons(config, target) {
   if (config.icon) {
     const svg = path.resolve(config.appDir, config.icon);
     if (!fs.existsSync(svg)) throw new Error(`missing icon: ${svg}`);
+    safeFile(config.sourceRoot, svg);
     // A logo that is not square is centered rather than stretched.
     const aspect = svgAspect(fs.readFileSync(svg, "utf8"));
     const draw = (size, file) =>
@@ -151,10 +198,14 @@ function copyIcons(config, target) {
     return;
   }
   const icons = path.resolve(config.appDir, required(config, "icons"));
+  const root = config.sourceRoot;
+  if (!insideDir(root, fs.realpathSync(icons))) {
+    throw new Error(`icons must stay inside the app directory: ${icons}`);
+  }
   for (const size of APP_ICON_SIZES) {
     const file = path.join(icons, `app_${size}.png`);
     if (!fs.existsSync(file)) throw new Error(`missing icon: ${file}`);
-    fs.copyFileSync(file, path.join(images, `app_${size}.png`));
+    fs.copyFileSync(safeFile(root, file), path.join(images, `app_${size}.png`));
   }
   for (const name of ["PACKAGE_ICON.PNG", "PACKAGE_ICON_256.PNG"]) {
     const candidates = [
@@ -164,7 +215,7 @@ function copyIcons(config, target) {
     ];
     const file = candidates.find((candidate) => fs.existsSync(candidate));
     if (!file) throw new Error(`missing package icon: ${candidates[0]}`);
-    fs.copyFileSync(file, path.join(target, name));
+    fs.copyFileSync(safeFile(root, file), path.join(target, name));
   }
 }
 
@@ -185,7 +236,7 @@ function frameworkVersion() {
   try {
     const commit = execFileSync(
       "git",
-      ["-C", repo, "describe", "--always", "--dirty", "--abbrev=7"],
+      ["-C", repo, "describe", "--always", "--dirty", "--abbrev=7", "--match", ""],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
     ).trim();
     return `${version}+${commit}`;
@@ -339,9 +390,13 @@ function parseFiles(value, appDir) {
     if (typeof source !== "string" || !source) {
       throw new Error(`files: ${target} needs a file next to the app config`);
     }
+    const resolved = path.resolve(appDir, source);
+    if (path.isAbsolute(source) || !insideDir(path.resolve(appDir), resolved)) {
+      throw new Error(`files: ${source} must stay inside the app directory`);
+    }
     return {
       target,
-      source: path.resolve(appDir, source),
+      source: resolved,
       name: `${index}-${path.posix.basename(target)}`,
     };
   });
@@ -394,7 +449,7 @@ function parseConfigFile(value) {
       ? { enu: "Settings", ...config.label }
       : { enu: config.label || "Settings", ger: config.label ? undefined : "Einstellungen" };
   for (const text of Object.values(label)) {
-    if (text !== undefined && /["\\<>\n]/.test(text))
+    if (text !== undefined && /["\\<>\x00-\x1f\x7f]/.test(text))
       throw new Error("configFile label must be plain text");
   }
   return { file, check, ready, timeout, label };
@@ -420,8 +475,8 @@ function parseUpdates(value, image) {
     throw new Error("updates needs the image tag to be a release such as 1.2.3, or current");
   }
   const url = String(updates.url || "");
-  if (url && !/^https?:\/\/[^\s"'<>\\]+$/.test(url)) {
-    throw new Error("updates url must be an http(s) address");
+  if (url && !/^https:\/\/[^\s"'<>\\]+$/.test(url)) {
+    throw new Error("updates url must be an https address");
   }
   return { image: published, current, url };
 }
@@ -499,15 +554,34 @@ export function buildApp(config, archInfo, skip) {
  */
 export function resolve(raw, configDir) {
   const config = { ...raw };
-  config.appDir = config.appDir ? path.resolve(configDir, config.appDir) : configDir;
+  // Nested package configs may reference other files in their own checkout (e.g. shared icons).
+  const directory = fs.realpathSync(configDir);
+  let root = directory;
+  while (!fs.existsSync(path.join(root, ".git")) && root !== path.dirname(root))
+    root = path.dirname(root);
+  config.sourceRoot = root === path.dirname(root) ? directory : root;
+  config.appDir = fs.realpathSync(path.resolve(directory, config.appDir || "."));
+  if (config.appDir !== config.sourceRoot && !insideDir(config.sourceRoot, config.appDir))
+    throw new Error("appDir must stay inside the app checkout");
+  for (const field of ["icon", "icons"]) {
+    if (config[field] && path.isAbsolute(config[field]))
+      throw new Error(`${field} must be relative`);
+  }
   const id = required(config, "id");
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
     throw new Error("id must be lowercase letters, digits and dashes, e.g. my-app");
   }
+  const sensitiveShare = (name) =>
+    ["homes", "docker", "web", "surveillance"].includes(name.toLowerCase());
+  if (sensitiveShare(id) && config.allowHostPaths !== true)
+    throw new Error(`package data share ${id} needs allowHostPaths: true`);
   if (!config.icon && !config.icons) {
     throw new Error("missing config field: icon (an SVG) or icons (a folder of PNGs)");
   }
   const version = required(config, "version");
+  if (!/^\d+(\.\d+)*(-\d+)?$/.test(String(version))) {
+    throw new Error("version must be a release such as 1.2.3");
+  }
   const displayName = required(config, "displayName");
   const description = required(config, "description");
   const maintainer = required(config, "maintainer");
@@ -517,7 +591,7 @@ export function resolve(raw, configDir) {
     ["maintainer", maintainer],
   ]) {
     // These end up inside JS strings, HTML and INFO; keep them plain text.
-    if (/["\\<>\n]/.test(String(value))) {
+    if (/["\\<>\x00-\x1f\x7f]/.test(String(value))) {
       throw new Error(`${key} must not contain quotes, backslashes, angle brackets or newlines`);
     }
   }
@@ -530,10 +604,39 @@ export function resolve(raw, configDir) {
     throw new Error("networkMode must be host or bridge");
   }
   config.image = required(config, "image");
+  for (const [key, value] of [
+    ["image", config.image],
+    ["bridgeImage", config.bridgeImage || `${id}-bridge:spk`],
+  ]) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(String(value))) {
+      throw new Error(`${key} must be an image reference`);
+    }
+  }
   // Per-app tag: packages built from different framework versions must not retag each other's
   // bridge image, which Container Manager would pick up on the next container recreate.
   config.bridgeImage = config.bridgeImage || `${id}-bridge:spk`;
   const authMode = config.authMode || "token";
+  const allowedOrigins = config.allowedOrigins ?? [];
+  if (
+    !Array.isArray(allowedOrigins) ||
+    allowedOrigins.some((origin) => {
+      try {
+        return !/^https?:\/\//.test(origin) || new URL(origin).origin !== origin;
+      } catch {
+        return true;
+      }
+    })
+  )
+    throw new Error("allowedOrigins must list exact HTTP(S) origins");
+  if (authMode === "none" && config.appAuthenticatesRequests !== true)
+    throw new Error("authMode none requires appAuthenticatesRequests: true");
+  for (const [key, min] of [
+    ["sessionSeconds", 60],
+    ["oneTimeSeconds", 10],
+  ]) {
+    if (config[key] !== undefined && (!Number.isSafeInteger(config[key]) || config[key] < min))
+      throw new Error(`${key} must be an integer >= ${min}`);
+  }
   if (authMode !== "token" && authMode !== "none") {
     throw new Error("authMode must be token or none");
   }
@@ -547,7 +650,7 @@ export function resolve(raw, configDir) {
           ger: config.outputLabel ? undefined : "Ausgabeordner",
         };
   for (const value of Object.values(outputLabel)) {
-    if (value !== undefined && /["\\<>\n]/.test(value))
+    if (value !== undefined && /["\\<>\x00-\x1f\x7f]/.test(value))
       throw new Error("outputLabel must be plain text");
   }
   const displayNameGer = config.displayNameGer || displayName;
@@ -556,16 +659,32 @@ export function resolve(raw, configDir) {
     ["displayNameGer", displayNameGer],
     ["descriptionGer", descriptionGer],
   ]) {
-    if (/["\\<>\n]/.test(String(value))) {
+    if (/["\\<>\x00-\x1f\x7f]/.test(String(value))) {
       throw new Error(`${key} must not contain quotes, backslashes, angle brackets or newlines`);
     }
   }
   config.container = config.container || id;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(config.container)) {
+    throw new Error("container must be a Docker container name");
+  }
   config.service = config.service || "app";
-  config.internalPort = Number(config.internalPort || internalPortFor(id));
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(config.service)) {
+    throw new Error("service must be a Compose service name");
+  }
+  config.internalPort = Number(
+    config.internalPort || (networkMode === "host" && config.containerPort) || internalPortFor(id),
+  );
   config.containerPort = Number(
     config.containerPort || (networkMode === "host" ? config.internalPort : 8080),
   );
+  for (const [key, value] of [
+    ["internalPort", config.internalPort],
+    ["containerPort", config.containerPort],
+  ]) {
+    if (!Number.isInteger(value) || value < 1 || value > 65535) {
+      throw new Error(`${key} must be a port from 1 to 65535`);
+    }
+  }
   if (networkMode === "host" && config.internalPort !== config.containerPort) {
     throw new Error("host networking requires internalPort == containerPort");
   }
@@ -575,19 +694,45 @@ export function resolve(raw, configDir) {
     throw new Error("defaultPort is no longer supported; the app is served on DSM's ports only");
   }
   // Empty: the package's own shared folder, on whichever volume DSM created it (see bridge-env).
-  config.dataDir = config.dataDir || "";
+  config.dataDir = config.dataDir ? String(config.dataDir) : "";
+  if (config.dataDir) {
+    const normalized = path.posix.normalize(config.dataDir);
+    const ownShare = `/var/packages/${id}/shares/${id}`;
+    const inOwnShare = normalized === ownShare || normalized.startsWith(`${ownShare}/`);
+    if (
+      !/^\/[A-Za-z0-9._/-]+$/.test(config.dataDir) ||
+      config.dataDir.includes("//") ||
+      (!inOwnShare && !/^\/volume\d+\/[A-Za-z0-9][A-Za-z0-9._-]*(?:\/|$)/.test(normalized))
+    ) {
+      throw new Error("dataDir must be a folder below a volume, not a system directory");
+    }
+    if (!inOwnShare && config.allowHostPaths !== true) {
+      throw new Error("dataDir outside the package share needs allowHostPaths: true");
+    }
+    config.dataDir = normalized;
+  }
   const dataDirDefault = config.dataDir || `/var/packages/${id}/shares/${id}`;
   // The folder lives in a shared folder that DSM creates when it is missing (like Synology's own
   // media apps do with "music"), so packages never make plain directories nobody can see.
   // outputParent/defaultOutputDir are the older way to say the same.
   config.outputShare =
     config.outputShare ||
-    (config.outputParent ? path.posix.basename(config.outputParent) : "music");
-  if (!/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/.test(config.outputShare))
+    (config.outputParent
+      ? path.posix.basename(config.outputParent)
+      : config.defaultOutputDir
+        ? path.posix.basename(path.posix.dirname(config.defaultOutputDir))
+        : `${id}-output`);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(config.outputShare))
     throw new Error("outputShare must be a share name");
   if (config.outputShare === id)
     throw new Error("outputShare must differ from id, the package's own share");
+  if (sensitiveShare(config.outputShare) && config.allowHostPaths !== true) {
+    throw new Error(`outputShare ${config.outputShare} needs allowHostPaths: true`);
+  }
   config.outputParent = `/volume1/${config.outputShare}`;
+  if (config.outputSubdir !== undefined) {
+    config.outputSubdir = String(config.outputSubdir);
+  }
   config.defaultOutputDir = `${config.outputParent}/${
     config.outputSubdir ||
     (config.defaultOutputDir ? path.posix.basename(config.defaultOutputDir) : id)
@@ -595,10 +740,53 @@ export function resolve(raw, configDir) {
   config.outputContainerRoot = config.outputContainerRoot || "/output-parent";
   // Named per package: apps whose folders share a parent must not repoint each other's link.
   config.outputLink = config.outputLink || `.${id}-folder`;
-  config.outputHostRoot = config.outputHostRoot || "/host-output";
+  if (config.outputHostRoot && config.outputHostRoot !== "/host-output")
+    throw new Error("outputHostRoot is reserved for the bridge");
+  config.outputHostRoot = "/host-output";
   config.outputSubdir = config.outputSubdir || path.basename(config.defaultOutputDir);
+  for (const [key, value] of [
+    ["outputSubdir", config.outputSubdir],
+    ["outputLink", config.outputLink],
+  ]) {
+    if (
+      !/^[A-Za-z0-9._-]+$/.test(value) ||
+      value === "." ||
+      value === ".." ||
+      value.includes("..")
+    ) {
+      throw new Error(`${key} must be a single folder name`);
+    }
+  }
+  for (const [key, value] of [
+    ["outputContainerRoot", config.outputContainerRoot],
+    ["outputHostRoot", config.outputHostRoot],
+  ]) {
+    if (
+      !/^\/[A-Za-z0-9._/-]+$/.test(value) ||
+      value.includes("//") ||
+      value.split("/").includes("..")
+    ) {
+      throw new Error(`${key} must be an absolute container path`);
+    }
+  }
   config.controlPort = Number(config.controlPort || controlPortFor(id));
+  if (
+    !Number.isInteger(config.controlPort) ||
+    config.controlPort < 1024 ||
+    config.controlPort > 65535
+  ) {
+    throw new Error("controlPort must be a port from 1024 to 65535");
+  }
   config.ui = config.ui || {};
+  for (const key of ["width", "height"]) {
+    if (config.ui[key] !== undefined) {
+      const value = Number(config.ui[key]);
+      if (!Number.isInteger(value) || value < 1 || value > 10000) {
+        throw new Error(`ui.${key} must be a whole number from 1 to 10000`);
+      }
+      config.ui[key] = value;
+    }
+  }
   config.files = parseFiles(config.files, config.appDir);
   const command = config.command === undefined ? null : stringList(config.command, "command");
   const configFile = parseConfigFile(config.configFile);
@@ -638,11 +826,28 @@ export function resolve(raw, configDir) {
   ) {
     throw new Error('publicCookies must be cookie names, e.g. ["csrftoken"]');
   }
+  // These cookies belong to DSM or to a bridge session. Forwarding them to an app on a public
+  // path would hand it a DSM or another package's session.
+  if (publicCookies.some((name) => protectedCookie(name))) {
+    throw new Error("publicCookies must not name DSM or bridge session cookies");
+  }
   const publicPrefix = `/webman/3rdparty/${id}/public`;
 
-  let appPath = config.appPath || "/";
+  let appPath = String(config.appPath || "/");
   if (!appPath.startsWith("/")) appPath = `/${appPath}`;
   if (!appPath.endsWith("/")) appPath = `${appPath}/`;
+  if (
+    !/^\/[A-Za-z0-9._~/-]*$/.test(appPath) ||
+    appPath.includes("//") ||
+    appPath.split("/").some((part) => part === "." || part === "..")
+  ) {
+    throw new Error("appPath must be an absolute web path");
+  }
+  for (const key of Object.keys(config.appEnv || {})) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      throw new Error(`appEnv key ${key} is not an environment variable name`);
+    }
+  }
 
   const defaultContainerOutput = `${config.outputContainerRoot}/${config.outputLink}`;
   const appEnv = {
@@ -698,14 +903,20 @@ export function resolve(raw, configDir) {
     bridgeImage: config.bridgeImage,
     container: config.container,
     hostPort: config.internalPort,
+    fixedInternalPort:
+      raw.internalPort || (networkMode === "host" && raw.containerPort) ? config.internalPort : "",
+    fixedControlPort: raw.controlPort ? config.controlPort : "",
+    hostNetwork: networkMode === "host",
     containerPort: config.containerPort,
     dataDir: config.dataDir,
     dataDirDefault,
     defaultOutputDir: config.defaultOutputDir,
-    appTitle: displayName,
+    defaultOutputDirJson: JSON.stringify(config.defaultOutputDir).slice(1, -1),
+    appTitle: composeValue(displayName),
     appPath,
     allUsers: config.allUsers === true ? "true" : "false",
     authMode,
+    allowedOrigins: composeValue(JSON.stringify(allowedOrigins)),
     showOutput: showOutput ? "true" : "false",
     identityHeaders: config.identityHeaders === true ? "true" : "false",
     // DSM replaces its user database on every change, so the directory is mounted, read-only.
@@ -798,6 +1009,8 @@ function check(config, values, archInfo) {
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-bridge-check-"));
   try {
     renderTemplates({ ...values, appUser: packageUser(config) ? "" : '    user: "0:0"' }, stage);
+    validateUiScripts(stage);
+    validateCompose(stage);
     for (const file of ["conf/resource", "conf/privilege", "ui/config"]) {
       JSON.parse(fs.readFileSync(path.join(stage, file), "utf8"));
     }
@@ -807,18 +1020,19 @@ function check(config, values, archInfo) {
     for (const cgi of UI_SCRIPTS) {
       execFileSync("sh", ["-n", path.join(stage, "ui", cgi)]);
     }
-    for (const file of config.files) {
-      if (!fs.statSync(file.source, { throwIfNoEntry: false })?.isFile())
-        throw new Error(`files: missing ${file.source}`);
-    }
+    for (const file of config.files) safeFile(config.appDir, file.source);
     if (config.icon) {
-      if (!fs.existsSync(path.resolve(config.appDir, config.icon)))
-        throw new Error(`missing icon: ${config.icon}`);
+      safeFile(config.sourceRoot, path.resolve(config.appDir, config.icon));
     } else {
       copyIcons(config, path.join(stage, "icons-check"));
     }
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
+  }
+  if (config.authMode === "none") {
+    console.warn(
+      `WARNING: ${values.id} uses authMode "none": anyone who can reach DSM nginx can open the app by URL. The app must authenticate every request itself.`,
+    );
   }
   console.log(`${values.id} ${values.version} (${archInfo.arch}) is valid`);
   for (const key of [
@@ -850,6 +1064,11 @@ function main() {
   if (options.check) {
     check(config, values, archInfo);
     return;
+  }
+  if (config.authMode === "none") {
+    console.warn(
+      `WARNING: ${values.id} uses authMode "none": anyone who can reach DSM nginx can open the app by URL. The app must authenticate every request itself.`,
+    );
   }
   const { id } = values;
 
@@ -898,10 +1117,12 @@ function assemblePackage(config, values, archInfo, options, stage) {
   fs.mkdirSync(pkg, { recursive: true });
 
   renderTemplates(values, payload);
+  validateUiScripts(payload);
+  validateCompose(payload);
   copyIcons(config, payload);
   fs.mkdirSync(path.join(payload, "files"), { recursive: true });
   for (const file of config.files) {
-    fs.copyFileSync(file.source, path.join(payload, "files", file.name));
+    fs.copyFileSync(safeFile(config.appDir, file.source), path.join(payload, "files", file.name));
     fs.chmodSync(path.join(payload, "files", file.name), 0o644);
   }
 
@@ -947,6 +1168,7 @@ function assemblePackage(config, values, archInfo, options, stage) {
       `APP_OUTPUT_CONTAINER_DIR=${config.outputContainerRoot}/${config.outputLink}`,
       "",
     ].join("\n"),
+    { mode: 0o600 },
   );
 
   console.log("==> saving images");

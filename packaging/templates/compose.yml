@@ -48,6 +48,7 @@ services:
       BRIDGE_APP_TITLE: {{appTitle}}
       BRIDGE_APP_PATH: "{{appPath}}"
       BRIDGE_AUTH: "{{authMode}}"
+      BRIDGE_ALLOWED_ORIGINS: {{allowedOrigins}}
       BRIDGE_OUTPUT: "{{showOutput}}"
       BRIDGE_IDENTITY_HEADERS: "{{identityHeaders}}"
       BRIDGE_USER_DB: "{{userDbFile}}"
