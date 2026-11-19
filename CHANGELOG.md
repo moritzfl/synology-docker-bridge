@@ -9,26 +9,33 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-19
+
 ### Added
 
 - **Open in new tab** on the Login Portal page too, left of the account name in DSM's header, so
   phones can show the app without that header. Added to the Home Screen, the tab opens like an
   app, with the app's name and icon.
 
-### Fixed
+### Migration
 
 - Packages with output enabled now default to `<id>-output`. To keep an existing installation’s
   implicit `music` share, set `outputShare: "music"` before rebuilding. Explicit output shares
   and legacy output paths keep their names.
-- Package validation checks the generated Compose model and UI scripts. External data shares
-  and disabling DSM authentication require explicit configuration.
-- The proxy protects DSM and bridge cookies on public routes, limits authenticated cross-origin
-  requests and framing, and keeps admin-only paths and tokens out of ordinary status requests.
-- Package installation selects private loopback ports. Settings checks, output moves and state
-  writes handle untrusted filesystem entries; named image users can read their identity secret.
+- Package validation checks the generated UI scripts and requires the Docker Compose CLI to
+  validate the service model. A `dataDir` outside the package share needs `allowHostPaths: true`;
+  `authMode: "none"` needs `appAuthenticatesRequests: true`.
 
-- The bridge's own pages (the app is starting, sign-in required) declare their language, so
-  screen readers read the German pages in German.
+### Security
+
+- DSM and bridge session cookies are protected on authenticated and public routes, even when an
+  app config names one in `publicCookies`. Authenticated writes, WebSocket upgrades and framing
+  are origin-restricted. Host paths and package update links are visible only to administrators.
+- Installation selects private loopback ports unless explicitly configured. Named image users
+  can read their identity secret. Package state and environment files are written privately.
+- Registry update checks constrain token and pagination requests to trusted origins and require
+  HTTPS package links.
+
 - The bridge no longer follows symlinks that an app places in its data folder: the shared identity
   secret and the settings file are opened without following links and written under fresh random
   names, so the root bridge cannot be pointed at another file.
@@ -38,14 +45,17 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
   that were not redeemed yet, so a removed privilege takes effect at once.
 - Settings and config requests are authenticated before the body is read, and their bodies and
   answers are kept in private files with unpredictable names.
-- The app's server no longer receives DSM's sign-in cookies: they are removed on every proxy path,
-  not only on ports of the app's own.
-- The window hands DSM's session token to its wrapper in the URL fragment, so the token no longer
-  reaches the app's server in the `Referer` header.
+- DSM session tokens travel in the wrapper URL fragment and CGI request headers, keeping them out
+  of access logs and the app's `Referer` header.
 - A malformed absolute request target no longer ends the bridge process; it answers `400`.
 - Changing the output folder no longer follows symlinks inside the share: missing folders are
-  created one component at a time, and the previous folder is resolved before anything is moved,
+  created one component at a time, and both folders are checked after stopping the app,
   so the root bridge cannot be led outside the share.
+
+### Fixed
+
+- The bridge's own pages (the app is starting, sign-in required) declare their language, so
+  screen readers read the German pages in German.
 
 ## [0.3.0] - 2026-11-18
 
@@ -80,5 +90,6 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 - A browser that reset a WebSocket while the app was still starting no longer stops the bridge.
 
-[Unreleased]: https://github.com/moritzfl/synology-docker-bridge/compare/0.3.0...HEAD
+[Unreleased]: https://github.com/moritzfl/synology-docker-bridge/compare/0.4.0...HEAD
+[0.4.0]: https://github.com/moritzfl/synology-docker-bridge/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/moritzfl/synology-docker-bridge/compare/d636fe8...0.3.0
