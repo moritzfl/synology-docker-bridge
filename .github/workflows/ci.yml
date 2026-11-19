@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  schedule:
+    - cron: "17 4 * * 1"
   pull_request:
   push:
     branches: [main]
@@ -25,10 +27,27 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=high
       - run: npm run format:check
       - run: npm ci --prefix bridge --ignore-scripts
+      - run: npm audit --prefix bridge --audit-level=high
+      - run: shellcheck -s sh -S error packaging/templates/scripts/* packaging/templates/ui/*.sh packaging/templates/ui/*.cgi
       - run: npm test
       - name: Validate example package configurations
         run: |
           node packaging/generate.mjs --check --config examples/nginx/app.json --arch x86_64
           node packaging/generate.mjs --check --config examples/nginx/app.json --arch armv8
+
+  image-scan:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: docker build --pull -t bridge:scan bridge && docker save -o "$RUNNER_TEMP/bridge.tar" bridge:scan
+      - run: >
+          docker run --rm -v "$RUNNER_TEMP/bridge.tar:/bridge.tar:ro"
+          aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+          image --input /bridge.tar --scanners vuln --severity HIGH,CRITICAL --exit-code 1
