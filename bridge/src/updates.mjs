@@ -1,4 +1,4 @@
-import fs from "node:fs/promises";
+import { readPrivateFile, writePrivateFile } from "./private-file.mjs";
 
 /**
  * Newer versions of the app's image in the registry it is published to. Once a day the bridge
@@ -62,6 +62,14 @@ export function parseChallenge(header) {
   return /^bearer\s/i.test(String(header || "")) ? fields : null;
 }
 
+function registryPage(value, origin) {
+  const url = new URL(value, origin);
+  if (url.protocol !== "https:" || url.origin !== origin) {
+    throw new Error("registry returned a tag page outside its origin");
+  }
+  return url;
+}
+
 /** All tags of the image, through the registry's anonymous pull token where it wants one. */
 export async function listTags(image, fetchImpl = fetch) {
   const { registry, repository } = parseImage(image);
@@ -69,30 +77,35 @@ export async function listTags(image, fetchImpl = fetch) {
   let url = `${origin}/v2/${repository}/tags/list?n=1000`;
   let token = "";
   const tags = [];
+  const get = (target, headers) =>
+    fetchImpl(target, { redirect: "error", signal: AbortSignal.timeout(20_000), headers });
   for (let page = 0; url && page < 20; page++) {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    let response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(20_000) });
+    let response = await get(url, headers);
     if (response.status === 401 && !token) {
       const challenge = parseChallenge(response.headers.get("www-authenticate"));
       if (!challenge?.realm) throw new Error(`registry wants credentials (${response.status})`);
       const auth = new URL(challenge.realm);
+      if (
+        auth.origin !== origin &&
+        !(origin === "https://registry-1.docker.io" && auth.origin === "https://auth.docker.io")
+      ) {
+        throw new Error("registry returned an untrusted token endpoint");
+      }
       if (challenge.service) auth.searchParams.set("service", challenge.service);
       auth.searchParams.set("scope", challenge.scope || `repository:${repository}:pull`);
-      const granted = await fetchImpl(auth, { signal: AbortSignal.timeout(20_000) });
+      const granted = await get(auth);
       if (!granted.ok) throw new Error(`registry token: HTTP ${granted.status}`);
       const body = await granted.json();
       token = body.token || body.access_token || "";
       if (!token) throw new Error("registry token: none given");
-      response = await fetchImpl(url, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(20_000),
-      });
+      response = await get(url, { Authorization: `Bearer ${token}` });
     }
     if (!response.ok) throw new Error(`registry tags: HTTP ${response.status}`);
     const body = await response.json();
     tags.push(...(Array.isArray(body.tags) ? body.tags.map(String) : []));
     const next = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") || "");
-    url = next ? new URL(next[1], origin).href : "";
+    url = next ? registryPage(next[1], origin).href : "";
   }
   return tags;
 }
@@ -114,7 +127,7 @@ export function createUpdates({
   async function load() {
     if (!stateFile) return;
     try {
-      const saved = JSON.parse(await fs.readFile(stateFile, "utf8"));
+      const saved = JSON.parse(readPrivateFile(stateFile));
       state = { ...state, ...saved, current };
       // The package was updated since: what was newer may not be any more.
       if (saved.current !== current) state.latest = newest([saved.latest || ""], current);
@@ -125,9 +138,7 @@ export function createUpdates({
 
   async function save() {
     if (!stateFile) return;
-    const temporary = `${stateFile}.tmp.${process.pid}`;
-    await fs.writeFile(temporary, JSON.stringify(state));
-    await fs.rename(temporary, stateFile);
+    writePrivateFile(stateFile, JSON.stringify(state));
   }
 
   async function check() {

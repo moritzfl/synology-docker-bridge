@@ -70,12 +70,12 @@ function registry() {
   const fetchImpl = async (url, options = {}) => {
     const href = String(url);
     calls.push(href);
-    if (href.startsWith("https://auth.example/token")) return json({ token: "anon" });
+    if (href.startsWith("https://reg.example/token")) return json({ token: "anon" });
     if (options.headers?.Authorization !== "Bearer anon") {
       return new Response("", {
         status: 401,
         headers: {
-          "www-authenticate": 'Bearer realm="https://auth.example/token",service="reg.example"',
+          "www-authenticate": 'Bearer realm="https://reg.example/token",service="reg.example"',
         },
       });
     }
@@ -95,9 +95,31 @@ test("lists every page of tags with an anonymous pull token", async () => {
     "latest",
     "4.1.23",
   ]);
-  const auth = new URL(calls.find((call) => call.startsWith("https://auth.example")));
+  const auth = new URL(calls.find((call) => call.startsWith("https://reg.example/token")));
   assert.equal(auth.searchParams.get("service"), "reg.example");
   assert.equal(auth.searchParams.get("scope"), "repository:org/app:pull");
+});
+
+test("refuses an internal token endpoint from a public registry", async () => {
+  await assert.rejects(
+    listTags(
+      "reg.example/org/app:1.0",
+      async () =>
+        new Response("", {
+          status: 401,
+          headers: { "www-authenticate": 'Bearer realm="http://127.0.0.1/token"' },
+        }),
+    ),
+    /token endpoint/,
+  );
+});
+
+test("refuses a tag page outside the registry's origin", async () => {
+  const fetchImpl = async () =>
+    new Response(JSON.stringify({ tags: [] }), {
+      headers: { link: '<https://evil.example/steal>; rel="next"' },
+    });
+  await assert.rejects(listTags("reg.example/org/app:1.0", fetchImpl), /tag page/);
 });
 
 test("keeps the newest version, can skip it, and remembers both across restarts", async () => {
