@@ -7,6 +7,7 @@
 //   - privilege revoked: the next open is refused and the open window's re-check closes the app
 //   - German: a user whose DSM follows a German browser sees the window in German
 import { chromium } from "@playwright/test";
+import { randomBytes } from "node:crypto";
 import {
   HTTPS,
   OUTPUT,
@@ -28,7 +29,10 @@ if (!id || !app) {
   process.exit(2);
 }
 const base = process.env.DSM_URL || HTTPS;
-const tester = { username: "bridge-e2e-user", password: "Bridge-e2e-Pass1!" };
+const tester = {
+  username: "bridge-e2e-user",
+  password: `${randomBytes(24).toString("base64url")}aA1!`,
+};
 const log = logger();
 let failed = 0;
 const check = (label, ok, detail = "") => {
@@ -37,22 +41,33 @@ const check = (label, ok, detail = "") => {
 };
 
 guest(
-  `synouser --get ${tester.username} >/dev/null 2>&1 || synouser --add ${tester.username} '${tester.password}' '' 0 '' 0 >/dev/null`,
+  `synouser --get ${tester.username} >/dev/null 2>&1 && synouser --del ${tester.username} >/dev/null 2>&1 || true
+   synouser --add ${tester.username} '${tester.password}' '' 0 '' 0 >/dev/null`,
 );
+const group = "bridge-e2e-group";
 // Rules go through DSM's own API: writing DSM's privilege database directly races DSM's lock.
-function setRule(allowed) {
+function setRule(
+  allowed,
+  entityType = "user",
+  entityName = tester.username,
+  allow_ip = ["0.0.0.0"],
+  deny_ip = [],
+) {
   const rules = JSON.stringify([
     {
-      entity_type: "user",
-      entity_name: tester.username,
+      entity_type: entityType,
+      entity_name: entityName,
       app_id: app,
-      allow_ip: ["0.0.0.0"],
-      deny_ip: [],
+      allow_ip,
+      deny_ip,
     },
   ]);
   guest(
     `synowebapi -s --exec api=SYNO.Core.AppPriv.Rule method=${allowed ? "set" : "delete"} version=1 rules='${rules}' >/dev/null`,
   );
+}
+function setGroupRule(allowed) {
+  setRule(allowed, "group", group);
 }
 
 const browser = await chromium.launch();
@@ -93,10 +108,10 @@ try {
   setRule(false);
   const user = await signIn(browser, base, tester);
   const token = await user.page.evaluate(() => _S("SynoToken"));
-  async function open() {
-    const page = await user.context.newPage();
+  async function openFor(account, accountToken) {
+    const page = await account.context.newPage();
     await page.goto(
-      `${base}/webman/3rdparty/${id}/app.html?SynoToken=${encodeURIComponent(token)}`,
+      `${base}/webman/3rdparty/${id}/app.html#SynoToken=${encodeURIComponent(accountToken)}`,
     );
     let text = "";
     for (let i = 0; i < 90; i++) {
@@ -111,12 +126,13 @@ try {
     }
     return { page, text };
   }
+  async function open() {
+    return openFor(user, token);
+  }
   let view = await open();
   const session = await view.page.evaluate(
     (t) =>
-      fetch(`session.cgi?SynoToken=${t}`, { headers: { "X-SynoToken": t } }).then((response) =>
-        response.text(),
-      ),
+      fetch("session.cgi", { headers: { "X-SYNO-TOKEN": t } }).then((response) => response.text()),
     token,
   );
   check(
@@ -163,7 +179,7 @@ try {
   await refused.page.close();
   // The wrapper re-checks every 10 minutes; run that check now instead of waiting.
   const closed = await view.page.evaluate(async (t) => {
-    const response = await fetch(`session.cgi?SynoToken=${t}`, { headers: { "X-SynoToken": t } });
+    const response = await fetch("session.cgi", { headers: { "X-SYNO-TOKEN": t } });
     const data = await response.json();
     const app = await fetch(`proxy/`, { cache: "no-store" });
     return { session: data.error || "token", app: app.status };
@@ -175,8 +191,34 @@ try {
   );
   await view.page.close();
   await user.context.close();
+
+  // A group grant opens the app too; no user rule is present at this point.
+  guest(`synogroup --get ${group} >/dev/null 2>&1 || synogroup --add ${group} >/dev/null`);
+  guest(`synogroup --member ${group} ${tester.username} >/dev/null`);
+  setGroupRule(true);
+  const member = await signIn(browser, base, tester);
+  const memberToken = await member.page.evaluate(() => _S("SynoToken"));
+  const groupView = await openFor(member, memberToken);
+  check("a group grant opens the app", groupView.text === "APP SHOWN", groupView.text.slice(0, 90));
+  await groupView.page.close();
+  for (const [label, type, name, allow, deny] of [
+    ["user deny overrides group grant", "user", tester.username, [], ["0.0.0.0"]],
+    ["restricted group grant excludes this address", "group", group, ["192.0.2.1"], []],
+  ]) {
+    setRule(true, type, name, allow, deny);
+    const denied = await openFor(member, memberToken);
+    check(label, /do not have permission/.test(denied.text), denied.text.slice(0, 90));
+    await denied.page.close();
+    setRule(false, type, name);
+  }
+  await member.context.close();
+  setGroupRule(false);
 } finally {
   setRule(false);
+  try {
+    setGroupRule(false);
+  } catch (ignore) {}
+  guest(`synogroup --del ${group} >/dev/null 2>&1 || true`);
 }
 
 // German: DSM follows the browser's language unless the user picked one.
