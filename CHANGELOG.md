@@ -17,6 +17,16 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ### Fixed
 
+- Packages with output enabled now default to `<id>-output`. To keep an existing installation’s
+  implicit `music` share, set `outputShare: "music"` before rebuilding. Explicit output shares
+  and legacy output paths keep their names.
+- Package validation checks the generated Compose model and UI scripts. External data shares
+  and disabling DSM authentication require explicit configuration.
+- The proxy protects DSM and bridge cookies on public routes, limits authenticated cross-origin
+  requests and framing, and keeps admin-only paths and tokens out of ordinary status requests.
+- Package installation selects private loopback ports. Settings checks, output moves and state
+  writes handle untrusted filesystem entries; named image users can read their identity secret.
+
 - The bridge's own pages (the app is starting, sign-in required) declare their language, so
   screen readers read the German pages in German.
 - The bridge no longer follows symlinks that an app places in its data folder: the shared identity
