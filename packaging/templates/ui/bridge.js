@@ -322,7 +322,13 @@
         // DSM's "?" opens its help on an empty page: packages have no help entry.
         showHelp: false,
         layout: "fit",
-        tbar: tbar,
+        tbar: tbar && {
+          items: tbar,
+          listeners: { afterrender: function (bar) {
+            // DSM's toolbar wrapper has 16px above and none below the buttons.
+            bar.getEl().parent().setStyle({ paddingTop: "8px", paddingBottom: "8px" });
+          } },
+        },
         items: [
           new Ext.BoxComponent({
             height: "100%",
