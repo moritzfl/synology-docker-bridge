@@ -9,6 +9,8 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-19
+
 ### Fixed
 
 - Upgrades select a new automatically assigned private Docker port when replacing a mapped
@@ -21,6 +23,7 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
   not trust the NAS certificate there yet (accepting it for DSM's port does not cover the app's
   port), and **Open address** opens it in a tab to accept it. The app then opens in the window by
   itself. Before, the message only pointed to the firewall.
+- Buttons in the DSM desktop app toolbar are vertically centered.
 
 ## [0.4.0] - 2026-11-19
 
@@ -103,6 +106,7 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 - A browser that reset a WebSocket while the app was still starting no longer stops the bridge.
 
-[Unreleased]: https://github.com/moritzfl/synology-docker-bridge/compare/0.4.0...HEAD
+[Unreleased]: https://github.com/moritzfl/synology-docker-bridge/compare/0.4.1...HEAD
+[0.4.1]: https://github.com/moritzfl/synology-docker-bridge/compare/0.4.0...0.4.1
 [0.4.0]: https://github.com/moritzfl/synology-docker-bridge/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/moritzfl/synology-docker-bridge/compare/d636fe8...0.3.0
