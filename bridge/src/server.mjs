@@ -18,6 +18,7 @@ import { dsmAddress } from "./address.mjs";
 import { applyIdentity, dsmEmail, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
+import { writePrivateFile } from "./private-file.mjs";
 import { pruneSuperseded } from "./images.mjs";
 import { ensureFolder, hostPath, isInside, normalizeDirectory, realFolder } from "./validate.mjs";
 
@@ -34,7 +35,10 @@ if (!config.token) {
   process.exit(1);
 }
 
-let env = dotenv.read(config.envFile);
+const packageOwner = fsSync.existsSync(config.tokenFile)
+  ? fsSync.lstatSync(config.tokenFile)
+  : null;
+let env = dotenv.read(config.envFile, packageOwner?.uid);
 if (config.output) {
   // The default folder sits in the share wherever it is; a saved folder outside it (an earlier
   // version, or a share that moved volumes) falls back to it rather than to a path that is gone.
@@ -48,20 +52,12 @@ if (config.output) {
 }
 
 function writeEnv() {
-  dotenv.write(config.envFile, env);
+  // The bridge runs as root; keep the files writable by the package scripts. The ownership is
+  // applied through the open descriptor, never to a path the package user could swap first.
+  const owner = packageOwner?.isFile() ? packageOwner : null;
+  dotenv.write(config.envFile, env, owner);
   if (config.stateEnvFile) {
-    dotenv.write(config.stateEnvFile, env);
-  }
-  // The bridge runs as root; keep the files writable by the package scripts.
-  try {
-    const owner = fsSync.statSync(config.tokenFile);
-    for (const file of [config.envFile, config.stateEnvFile]) {
-      if (file) {
-        fsSync.chownSync(file, owner.uid, owner.gid);
-      }
-    }
-  } catch (error) {
-    log("debug", "env ownership could not be aligned", { error: error.message });
+    dotenv.write(config.stateEnvFile, env, owner);
   }
 }
 
@@ -712,13 +708,10 @@ async function syncContainerManager() {
     stored.id = container.id;
     stored.image = container.image || stored.image;
     stored.labels = container.labels || stored.labels;
-    const temporary = `${file}.tmp.${process.pid}`;
     try {
-      await fs.writeFile(temporary, JSON.stringify(stored), { mode: 0o600 });
-      await fs.rename(temporary, file);
+      writePrivateFile(file, JSON.stringify(stored));
       log("info", "container manager state synced", { name, id: container.id });
     } catch (error) {
-      await fs.rm(temporary, { force: true }).catch(() => {});
       log("warn", "container manager config could not be updated", { file, error: error.message });
     }
   }

@@ -1,4 +1,4 @@
-import fs from "node:fs/promises";
+import { readPrivateFile, writePrivateFile } from "./private-file.mjs";
 
 /**
  * Package upgrades preload new images under the same tags, which leaves the previous images
@@ -9,7 +9,7 @@ import fs from "node:fs/promises";
 export async function pruneSuperseded({ stateFile, containers, inspect, remove, log }) {
   let previous = [];
   try {
-    previous = JSON.parse(await fs.readFile(stateFile, "utf8")).images || [];
+    previous = JSON.parse(readPrivateFile(stateFile)).images || [];
   } catch (error) {
     if (error.code !== "ENOENT") {
       log("warn", "image state could not be read", { error: error.message });
@@ -38,7 +38,7 @@ export async function pruneSuperseded({ stateFile, containers, inspect, remove, 
     }
   }
   const next = [...new Set([...current, ...kept])];
-  await fs.writeFile(stateFile, JSON.stringify({ images: next }) + "\n", { mode: 0o600 });
+  writePrivateFile(stateFile, JSON.stringify({ images: next }) + "\n");
   if (removed.length) {
     log("info", "removed images replaced by an upgrade", { removed });
   }

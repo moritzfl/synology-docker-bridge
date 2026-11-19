@@ -1,5 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
+import { readPrivateFile, writePrivateFile } from "./private-file.mjs";
 
 /** Minimal .env parser for compose files: KEY=VALUE, comments, single/double quotes. */
 export function parse(text) {
@@ -43,20 +42,18 @@ function quote(value) {
   return `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-export function read(file) {
+export function read(file, owner) {
   try {
-    return parse(fs.readFileSync(file, "utf8"));
+    return parse(readPrivateFile(file, owner));
   } catch (error) {
-    if (error.code === "ENOENT") {
+    // A missing file, and a symlink planted where the file belongs, both start from no values.
+    if (["ENOENT", "ELOOP", "ENOTDIR"].includes(error.code)) {
       return {};
     }
     throw error;
   }
 }
 
-export function write(file, values) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temporary = `${file}.tmp.${process.pid}`;
-  fs.writeFileSync(temporary, format(values), { mode: 0o644 });
-  fs.renameSync(temporary, file);
+export function write(file, values, owner = null) {
+  writePrivateFile(file, format(values), { mode: 0o600, owner });
 }

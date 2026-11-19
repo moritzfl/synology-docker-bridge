@@ -17,6 +17,18 @@ EMPTY=
   assert.equal(values.EMPTY, "");
 });
 
+test("never follows a symlink planted at the env file", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bridge-dotenv-"));
+  const target = path.join(dir, "target");
+  const file = path.join(dir, ".env");
+  fs.writeFileSync(target, "SECRET=keep\n");
+  fs.symlinkSync(target, file);
+  assert.deepEqual(dotenv.read(file), {});
+  dotenv.write(file, { APP_PORT: "8742" });
+  assert.equal(fs.readFileSync(target, "utf8"), "SECRET=keep\n");
+  assert.equal(fs.lstatSync(file).isSymbolicLink(), false);
+});
+
 test("writes values atomically and keeps spaces quoted", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bridge-dotenv-"));
   const file = path.join(dir, ".env");
