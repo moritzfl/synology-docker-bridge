@@ -42,6 +42,7 @@
       <p id="message"></p>
       <div id="spinner" class="spinner" aria-hidden="true"></div>
       <div class="actions">
+        <button id="visit" class="primary" type="button" hidden></button>
         <button id="start" class="primary" type="button" hidden></button>
         <button id="restart" type="button" hidden></button>
         <button id="retry" type="button" hidden></button>
@@ -72,6 +73,7 @@
         spinner: document.getElementById("spinner"),
         detail: document.getElementById("detail"),
         start: document.getElementById("start"),
+        visit: document.getElementById("visit"),
         retry: document.getElementById("retry"),
         restart: document.getElementById("restart"),
         frame: document.getElementById("frame"),
@@ -129,7 +131,16 @@
 
       function fail(error) {
         if (TAB && (error.code === "auth" || error.code === "token") && relaunch()) return;
-        show({ title: t("couldNotOpen"), message: explain(error), retry: true });
+        // Over HTTPS the usual cause is a certificate the browser does not trust for this address
+        // yet: accepting it on DSM's port does not cover the app's port.
+        var visit = error.code === "unreachable" && location.protocol === "https:";
+        show({
+          title: t("couldNotOpen"),
+          message: explain(error),
+          retry: true,
+          visit: visit,
+          detail: visit ? t("unreachableFirewall") : "",
+        });
       }
 
       function t(key, values) {
@@ -143,6 +154,7 @@
       els.start.textContent = t("start");
       els.restart.textContent = t("restart");
       els.retry.textContent = t("retry");
+      els.visit.textContent = t("openAddress");
 
       // Short, human explanations instead of raw helper codes.
       var ERRORS = {
@@ -183,6 +195,9 @@
 
       function explain(error) {
         if (error && error.code === "unreachable") {
+          if (location.protocol === "https:") {
+            return t("unreachableCertificate", { address: APP_ORIGIN.replace(/^https:\/\//, "") });
+          }
           return t("unreachable", { port: APP_ORIGIN.split(":").pop() });
         }
         var key = ERRORS[error && error.code];
@@ -197,6 +212,7 @@
         els.spinner.hidden = !view.busy;
         els.detail.hidden = !view.detail;
         els.detail.textContent = view.detail || "";
+        els.visit.hidden = !view.visit;
         els.start.hidden = !view.start;
         els.start.disabled = false;
         els.retry.hidden = !view.retry;
@@ -326,6 +342,23 @@
       }, 10 * 60 * 1000);
 
       els.retry.addEventListener("click", function () { open("open"); });
+
+      // The app's address opens in a tab, where the browser asks about the certificate. Once it
+      // answers, the app opens here; the tab closes itself.
+      function waitForAddress(mine, until) {
+        return sleep(2000).then(function () {
+          if (mine !== generation) return;
+          return fetch(APP_BASE + "__bridge_ping", { cache: "no-store" }).then(function () {
+            if (mine === generation) open("open");
+          }, function () {
+            if (Date.now() < until) return waitForAddress(mine, until);
+          });
+        });
+      }
+      els.visit.addEventListener("click", function () {
+        window.open(APP_BASE + "__bridge_reachable", "_blank");
+        waitForAddress(generation, Date.now() + 10 * 60 * 1000);
+      });
       els.restart.addEventListener("click", function () {
         els.restart.disabled = true;
         generation++;

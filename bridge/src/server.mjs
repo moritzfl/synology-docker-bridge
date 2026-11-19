@@ -160,6 +160,8 @@ const PAGE_TEXTS = {
     signInBody:
       "Open {app} from the DSM desktop. Its icon signs this window in with your DSM account.",
     openDsm: "Open DSM",
+    reachableTitle: "{app} is reachable",
+    reachable: "{app} now opens in DSM. You can close this tab.",
   },
   de: {
     starting: "{app} wird gestartet",
@@ -169,6 +171,8 @@ const PAGE_TEXTS = {
     signInBody:
       "Öffnen Sie {app} über den DSM-Desktop. Das Symbol meldet dieses Fenster mit Ihrem DSM-Konto an.",
     openDsm: "DSM öffnen",
+    reachableTitle: "{app} ist erreichbar",
+    reachable: "{app} öffnet sich jetzt in DSM. Sie können diesen Tab schließen.",
   },
 };
 
@@ -177,7 +181,7 @@ function pageLanguage(request) {
 }
 
 function pageText(request, key) {
-  return PAGE_TEXTS[pageLanguage(request)][key].replace("{app}", config.appTitle);
+  return PAGE_TEXTS[pageLanguage(request)][key].replaceAll("{app}", config.appTitle);
 }
 
 proxy.on("error", (error, request, response) => {
@@ -490,6 +494,26 @@ async function publicHandler(request, response) {
         "Access-Control-Allow-Origin": "*",
       });
       response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/__bridge_reachable") {
+      // Opened from the DSM window when it cannot reach the app's own address, typically because
+      // the browser does not trust the certificate there yet. Once the visitor has accepted it,
+      // the page closes itself; the window notices the address answers and opens the app.
+      response.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
+      response.end(
+        page({
+          language: pageLanguage(request),
+          title: pageText(request, "reachableTitle"),
+          heading: pageText(request, "reachableTitle"),
+          body: `<p>${escapeHtml(pageText(request, "reachable"))}</p>`,
+          script: "if (window.opener) window.close();",
+        }),
+      );
       return;
     }
     if (request.method === "GET" && url.pathname === "/__bridge_login") {
