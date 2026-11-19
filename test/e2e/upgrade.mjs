@@ -23,17 +23,20 @@ const root = `/var/packages/${oldPackage.id}`;
 const share = `${root}/shares/${oldPackage.id}`;
 const marker = `${share}/bridge-upgrade-${randomUUID()}`;
 const config = () =>
-  guest(`grep -E '^APP_(DATA_DIR|INTERNAL_PORT|CONTAINER_PORT|OUTPUT_)' '${root}/var/app.env'`)
+  guest(`grep -E '^APP_(DATA_DIR|CONTAINER_PORT|OUTPUT_)' '${root}/var/app.env'`)
     .trim()
     .split("\n")
     .sort();
 
 install(before);
+const internalPort = () => guest(`cat '${root}/var/internal-port'`).trim();
+const oldPort = internalPort();
 const expected = config();
 assert.ok(expected.some((line) => line.startsWith("APP_DATA_DIR=")));
 guest(`printf '%s\\n' 'bridge upgrade keep me' > '${marker}'`);
 try {
   install(after);
+  assert.notEqual(internalPort(), oldPort, "do not reclaim the old private Docker mapping");
   assert.deepEqual(config(), expected);
   assert.equal(guest(`cat '${marker}'`).trim(), "bridge upgrade keep me");
   console.log(

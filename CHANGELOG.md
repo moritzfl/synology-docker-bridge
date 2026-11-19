@@ -11,6 +11,9 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ### Fixed
 
+- Upgrades select a new automatically assigned private Docker port when replacing a mapped
+  container. DSM can still reserve its old port after stopping it, causing an otherwise valid
+  package upgrade to fail and require repair. Public app ports stay the same.
 - Apps on ports of their own (`webPorts`) open again when DSM is reached on another port than
   5000/5001, such as 443 or a Login Portal port: the app lets exactly the DSM address it was
   opened from frame it, on the same host. In 0.4.0 the window stayed grey there.

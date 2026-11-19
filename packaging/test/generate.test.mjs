@@ -486,6 +486,33 @@ test("host-network apps, nginx and CGI use the same ports before and after insta
   assert.equal(fs.statSync(env).mode & 0o777, 0o600);
 });
 
+test("an upgrade replaces the private Docker mapping without restoring the old value", () => {
+  const { target, read } = render({ ...minimal, containerPort: 8000 });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "upgrade-port-"));
+  fs.mkdirSync(path.join(target, "docker"));
+  fs.writeFileSync(path.join(target, "docker", ".env"), "");
+  fs.writeFileSync(path.join(dir, "internal-port"), "26820\n");
+  fs.writeFileSync(path.join(dir, "bridge-port"), "39581\n");
+  fs.writeFileSync(path.join(dir, "app.env"), "APP_INTERNAL_PORT=26820\nAPP_CONTAINER_PORT=8000\n");
+  execFileSync(
+    "sh",
+    [
+      "-ec",
+      '. "$1"; configure_ports; record_ports; ensure_env; save_env',
+      "sh",
+      path.join(target, "scripts", "bridge-env"),
+    ],
+    { env: { ...process.env, SYNOPKG_PKGVAR: dir, SYNOPKG_PKGDEST: target } },
+  );
+  const port = fs.readFileSync(path.join(dir, "internal-port"), "utf8").trim();
+  assert.match(port, /^2\d{4}$/);
+  assert.notEqual(port, "26820");
+  assert.ok(read("docker/.env").includes(`APP_INTERNAL_PORT=${port}\n`));
+  assert.ok(read("docker/.env").includes("BRIDGE_CONTROL_PORT=39581\n"));
+  assert.ok(read("docker/.env").includes("APP_CONTAINER_PORT=8000\n"));
+  assert.equal(fs.readFileSync(path.join(dir, "app.env"), "utf8"), read("docker/.env"));
+});
+
 test("DSM's own ports are read from its nginx config for the way back from the app's ports", () => {
   const { target } = render(minimal);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-port-"));

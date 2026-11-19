@@ -36,9 +36,10 @@ choose_port() {
     fixed="$2"
     base="$3"
     saved="$(cat "$file" 2>/dev/null || true)"
+    avoid="${4:-}"
     if [ -n "$fixed" ]; then
         port="$fixed"
-    elif valid_port "$saved"; then
+    elif valid_port "$saved" && [ "$saved" != "$avoid" ]; then
         port="$saved"
     else
         attempts=0
@@ -47,7 +48,7 @@ choose_port() {
             case "$number" in ''|*[!0-9]*) return 1 ;; esac
             port=$((base + number % 10000))
             hex="$(printf '%04X' "$port")"
-            if ! awk -v port=":$hex" '$4 == "0A" && $2 ~ port "$" { found=1 } END { exit !found }' \
+            if [ "$port" != "$avoid" ] && ! awk -v port=":$hex" '$4 == "0A" && $2 ~ port "$" { found=1 } END { exit !found }' \
                 /proc/net/tcp /proc/net/tcp6 2>/dev/null; then break; fi
             attempts=$((attempts + 1))
         done
@@ -57,7 +58,14 @@ choose_port() {
 }
 
 configure_ports() {
-    internal="$(choose_port "$INTERNAL_FILE" "{{fixedInternalPort}}" 20000)"
+    # Container Manager can still reserve the previous Docker port after stopping the project.
+    # A replacement project needs a different private mapping even if nothing is listening.
+    previous=""
+    if [ "{{hostNetwork}}" != true ]; then
+        previous="$(cat "$INTERNAL_FILE" 2>/dev/null || true)"
+        valid_port "$previous" || previous="$(sed -n 's/^APP_INTERNAL_PORT=//p' "$STATE_ENV" 2>/dev/null | head -1)"
+    fi
+    internal="$(choose_port "$INTERNAL_FILE" "{{fixedInternalPort}}" 20000 "$previous")"
     control="$(choose_port "$CONTROL_FILE" "{{fixedControlPort}}" 30000)"
     set_env APP_INTERNAL_PORT "$internal"
     if [ "{{hostNetwork}}" = true ]; then set_env APP_CONTAINER_PORT "$internal"; fi
