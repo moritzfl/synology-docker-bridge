@@ -9,6 +9,12 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ## [Unreleased]
 
+### Fixed
+
+- Apps on ports of their own (`webPorts`) open again when DSM is reached on another port than
+  5000/5001, such as 443 or a Login Portal port: the app lets exactly the DSM address it was
+  opened from frame it, on the same host. In 0.4.0 the window stayed grey there.
+
 ## [0.4.0] - 2026-11-19
 
 ### Added

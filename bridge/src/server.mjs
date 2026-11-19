@@ -16,7 +16,7 @@ import { dsmAddress } from "./address.mjs";
 import { applyIdentity, dsmEmail, ensureSecret } from "./identity.mjs";
 import * as dotenv from "./dotenv.mjs";
 import { createDocker } from "./docker.mjs";
-import { applyFraming, frameAncestors } from "./framing.mjs";
+import { applyFraming, frameAncestors, framingOrigin } from "./framing.mjs";
 import { pruneSuperseded } from "./images.mjs";
 import { writePrivateFile } from "./private-file.mjs";
 import { crossSite, sameOrigin, unsafeMethod } from "./origin.mjs";
@@ -110,7 +110,7 @@ function stripFrameHeaders(headers, prefix = "", request = null) {
       headers.location = `${prefix}${location}`;
     }
   }
-  applyFraming(headers, frameAncestors(config, request?.headers.host));
+  applyFraming(headers, frameAncestors(config, request?.headers.host, request?._bridgeFrame));
 }
 
 proxy.on("proxyRes", (proxyResponse, request) => {
@@ -493,7 +493,10 @@ async function publicHandler(request, response) {
       return;
     }
     if (request.method === "GET" && url.pathname === "/__bridge_login") {
-      const session = auth.login(url.searchParams.get("token") || "");
+      const session = auth.login(
+        url.searchParams.get("token") || "",
+        framingOrigin(url.searchParams.get("origin"), request.headers.host),
+      );
       if (!session) {
         unauthorized(response, request);
         return;
@@ -548,6 +551,7 @@ async function publicHandler(request, response) {
     // Keep the backend rooted at / so unmodified OCI images do not need to
     // know about the DSM package subpath.
     request._bridgePrefix = forwardedPrefix(request);
+    request._bridgeFrame = identity.frame;
     delete request.headers["x-forwarded-prefix"];
     proxy.web(request, response);
   } catch (error) {

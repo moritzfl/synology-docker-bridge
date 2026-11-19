@@ -31,6 +31,15 @@ test("one-time token becomes a session cookie", () => {
   assert.equal(auth.login(token), null, "one-time token must not be reusable");
 });
 
+test("a session keeps the DSM address it was opened from", () => {
+  const auth = createAuthenticator(config());
+  const session = auth.login(auth.mint("admin"), "https://nas.example:443");
+  const identity = auth.authenticate({ headers: { cookie: `dsm_bridge_session=${session}` } });
+  assert.equal(identity.frame, "https://nas.example:443");
+  const plain = auth.login(auth.mint("admin"));
+  assert.equal(auth.authenticate({ headers: { cookie: `dsm_bridge_session=${plain}` } }).frame, "");
+});
+
 test("invalid and missing sessions are rejected", () => {
   const auth = createAuthenticator(config());
   assert.equal(auth.authenticate({ headers: {} }), null);

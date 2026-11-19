@@ -89,7 +89,8 @@ export function createAuthenticator(config) {
       return token;
     },
 
-    login(token) {
+    /** `frame` is the DSM address the app is opened in, which may frame it during the session. */
+    login(token, frame = "") {
       const entry = take(token);
       if (!entry) {
         return null;
@@ -101,6 +102,7 @@ export function createAuthenticator(config) {
         groups: entry.groups,
         name: entry.name,
         email: entry.email,
+        frame: String(frame || ""),
         expiresAt: now + sessionMs,
         verifiedUntil: now + verifyMs,
         sockets: new Set(),

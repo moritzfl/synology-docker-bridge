@@ -290,7 +290,9 @@
           return api("session.cgi");
         }).then(function (session) {
           if (mine !== generation) return;
-          els.frame.src = APP_BASE + "__bridge_login?token=" + encodeURIComponent(session.token);
+          // The app lets the address this page is on frame it, whichever DSM port that is.
+          els.frame.src = APP_BASE + "__bridge_login?token=" + encodeURIComponent(session.token)
+            + "&origin=" + encodeURIComponent(location.origin);
           els.frame.style.display = "block";
           els.state.style.display = "none";
           // The DSM window's title still names the state it last saw, such as "starting".
