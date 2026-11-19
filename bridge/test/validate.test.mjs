@@ -50,6 +50,8 @@ test("creates missing folders below the root and refuses symlinks on the way", a
   await assert.rejects(ensureFolder(root, path.join(root, "link/sub")), /outside/);
   await assert.rejects(ensureFolder(root, path.join(root, "link")), /outside/);
   await assert.rejects(realFolder(root, path.join(root, "link")), /outside/);
+  fs.symlinkSync(created, path.join(root, "inside"));
+  await assert.rejects(realFolder(root, path.join(root, "inside")), /outside/);
   assert.equal(fs.readdirSync(outside).length, 0, "nothing is created through the link");
 });
 

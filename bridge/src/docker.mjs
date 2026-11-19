@@ -89,6 +89,19 @@ export function createDocker({ socketPath = "/var/run/docker.sock", timeoutMs = 
       return summarize(response.body);
     },
 
+    async processUser(container, pid) {
+      const result = await request(
+        "GET",
+        `/containers/${name(container)}/top?ps_args=-o%20pid%2Cuid%2Cgid`,
+        { timeout: 15_000 },
+      );
+      if (result.status !== 200) throw fail(result, `top ${container}`);
+      const row = result.body.Processes?.find(([id]) => id === String(pid));
+      if (!row || !/^\d+$/.test(row[1]) || !/^\d+$/.test(row[2]) || Number(row[1]) === 0)
+        return null;
+      return { uid: Number(row[1]), gid: Number(row[2]) };
+    },
+
     /** Starts a container; already running counts as success. */
     async start(container) {
       const response = await request("POST", `/containers/${name(container)}/start`);
@@ -164,6 +177,7 @@ function summarize(item) {
     id: item.Id,
     name: String(item.Name || "").replace(/^\//, ""),
     image: item.Config?.Image || "",
+    pid: item.State?.Pid || 0,
     user: item.Config?.User || "",
     imageId: item.Image || "",
     labels: item.Config?.Labels || {},

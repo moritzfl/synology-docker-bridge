@@ -73,7 +73,8 @@ export async function realFolder(hostRoot, host) {
   const root = await fs.realpath(hostRoot);
   const real = await fs.realpath(path.posix.normalize(host));
   const stat = await fs.stat(real);
-  if (!stat.isDirectory() || !isInside(root, real)) {
+  const expected = path.posix.resolve(root, path.posix.relative(hostRoot, host));
+  if (!stat.isDirectory() || real !== expected || real === root || !isInside(root, real)) {
     throw new Error("folder is outside the allowed volume");
   }
   return real;

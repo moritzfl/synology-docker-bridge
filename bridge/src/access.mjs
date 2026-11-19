@@ -34,6 +34,21 @@ export function parseUser(value) {
   return uid === 0 ? null : { uid, gid };
 }
 
+/**
+ * The app's numeric user. Images may declare a name such as `USER node`; ask the running
+ * container for its ids instead of treating the name as root. Null means root, no user, or an
+ * id that could not be resolved.
+ */
+export async function resolveUser(info, docker, container) {
+  const value = info?.user || "";
+  const explicit = /^(\d+):(\d+)$/.test(value);
+  if (explicit) return parseUser(value);
+  if (!value || /^(root|0)(:|$)/.test(value) || !info.pid) return null;
+  // Read kernel credentials through Docker. An image need not contain `id`, and its
+  // executables must never get to supply credentials for a host filesystem operation.
+  return docker.processUser(container, info.pid).catch(() => null);
+}
+
 export async function probe(dir, user, run = execFileAsync) {
   try {
     const stat = await fs.stat(dir);

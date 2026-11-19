@@ -3,10 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createConfigFile, versionOf } from "../src/config-file.mjs";
+import { createConfigFile, MAX_BYTES, versionOf } from "../src/config-file.mjs";
 
 /** A container that restarts on request; `crashes` makes the next starts die after a moment. */
-function fakeDocker({ checkExit = 0, checkOutput = "", crashes = 0 } = {}) {
+function fakeDocker({ checkExit = 0, checkOutput = "", crashes = 0, swapCandidate = "" } = {}) {
   const docker = {
     starts: 0,
     restarts: 0,
@@ -30,13 +30,15 @@ function fakeDocker({ checkExit = 0, checkOutput = "", crashes = 0 } = {}) {
       }
     },
     async exec(container, command) {
-      const file = command.find((arg) => /\/\.bridge-check-[^/]+\/settings\.py$/.test(arg));
+      const file = command.find((arg) => /\/\.[0-9a-f]+-settings\.py$/.test(arg));
       docker.execs.push({ command, candidate: file });
       if (file) {
-        docker.candidateSeen = fs.readFileSync(
-          path.join(docker.dir, file.replace(/^\/data\//, "")),
-          "utf8",
-        );
+        const local = path.join(docker.dir, file.replace(/^\/data\//, ""));
+        docker.candidateSeen = fs.readFileSync(local, "utf8");
+        if (swapCandidate) {
+          fs.rmSync(local, { force: true });
+          fs.symlinkSync(swapCandidate, local);
+        }
       }
       return { exitCode: checkExit, output: checkOutput };
     },
@@ -123,13 +125,26 @@ test("a failed check leaves the file and the app alone and says why", async () =
   assert.equal(docker.restarts, 0);
   assert.equal(docker.candidateSeen, "DEBUG = (\n", "the check saw the new text");
   assert.deepEqual(docker.execs[0].command.slice(0, 2), ["python", "check.py"]);
-  assert.match(docker.execs[0].command[2], /^\/data\/\.bridge-check-[^/]+\/settings\.py$/);
+  assert.match(docker.execs[0].command[2], /^\/data\/\.[0-9a-f]+-settings\.py$/);
   assert.equal(
-    fs.readdirSync(dir).some((entry) => entry.startsWith(".bridge-check")),
+    fs.readdirSync(dir).some((entry) => /^\.[0-9a-f]+-settings\.py$/.test(entry)),
     false,
-    "no scratch left behind",
+    "no check candidate left behind",
   );
   assert.equal(config.status().state, "idle");
+});
+
+test("a check candidate swapped for a symlink is removed, never followed", async () => {
+  const outside = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "check-target-")), "target");
+  fs.writeFileSync(outside, "keep");
+  const { config, read } = setup({ swapCandidate: outside });
+  const result = await config.save({
+    content: "DEBUG = True\n",
+    version: versionOf(read()),
+  });
+  assert.equal(result.ok, true);
+  await settled(config);
+  assert.equal(fs.readFileSync(outside, "utf8"), "keep", "the symlink target is untouched");
 });
 
 test("a good file is saved, the app restarted, and the check's notes passed on", async () => {
@@ -179,6 +194,9 @@ test("refuses symlinks and files that are too large", async () => {
     other.save({ content: "x".repeat(300 * 1024), version: versionOf("DEBUG = False\n") }),
     { code: "too-large" },
   );
+  const large = setup();
+  fs.writeFileSync(path.join(large.dir, "settings.py"), "x".repeat(MAX_BYTES + 1));
+  await assert.rejects(large.config.read(), { code: "too-large" });
   await assert.rejects(other.save({ content: 1, version: "" }), { code: "invalid" });
 });
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { parseUser, probe } from "../src/access.mjs";
+import { parseUser, probe, resolveUser } from "../src/access.mjs";
 
 test("reads the package user's ids from the container", () => {
   assert.deepEqual(parseUser("116095:116095"), { uid: 116095, gid: 116095 });
@@ -14,6 +14,25 @@ test("offers no check for root, user names or no user", () => {
   for (const value of ["", "0", "0:0", "root", "app:app", undefined]) {
     assert.equal(parseUser(value), null, String(value));
   }
+});
+
+test("resolves a named image user through the running container", async () => {
+  const docker = {
+    async processUser(container, pid) {
+      assert.equal(container, "app");
+      assert.equal(pid, 123);
+      return { uid: 1000, gid: 1001 };
+    },
+  };
+  assert.deepEqual(await resolveUser({ user: "node:staff", pid: 123 }, docker, "app"), {
+    uid: 1000,
+    gid: 1001,
+  });
+  assert.equal(await resolveUser({ user: "root" }, docker, "app"), null);
+  assert.deepEqual(await resolveUser({ user: "1000:1001" }, docker, "app"), {
+    uid: 1000,
+    gid: 1001,
+  });
 });
 
 test("a missing folder is reported as missing, without running a probe", async () => {

@@ -69,17 +69,24 @@ export async function ensureSecret(file, user) {
 async function readSecret(file, user) {
   let handle;
   try {
-    handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch (error) {
     if (["ENOENT", "ELOOP", "ENOTDIR"].includes(error.code)) return "";
     throw error;
   }
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || (user && stat.uid !== 0 && stat.uid !== user.uid)) {
+    if (
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      (stat.uid !== process.getuid() && stat.uid !== user?.uid)
+    ) {
       return "";
     }
-    const secret = (await handle.readFile("utf8")).trim();
+    const data = Buffer.alloc(66);
+    const { bytesRead } = await handle.read(data, 0, data.length, 0);
+    if (bytesRead === data.length) return "";
+    const secret = data.toString("utf8", 0, bytesRead).trim();
     if (!/^[0-9a-f]{64}$/.test(secret)) {
       return "";
     }

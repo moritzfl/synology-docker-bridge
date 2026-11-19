@@ -3,15 +3,13 @@ import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import httpProxy from "http-proxy";
 import { createAuthenticator } from "./auth.mjs";
 import { ConfigError, createConfigFile } from "./config-file.mjs";
 import { createUpdates } from "./updates.mjs";
 import { loadConfig } from "./config.mjs";
 import { dropDsmCookies, onlyCookies, scopeCookies, withoutDsmCookies } from "./cookies.mjs";
-import { parseUser, probe } from "./access.mjs";
+import { probe, resolveUser } from "./access.mjs";
 import { publicTarget } from "./public.mjs";
 import { requestUrl } from "./request-url.mjs";
 import { dsmAddress } from "./address.mjs";
@@ -22,7 +20,6 @@ import { writePrivateFile } from "./private-file.mjs";
 import { pruneSuperseded } from "./images.mjs";
 import { ensureFolder, hostPath, isInside, normalizeDirectory, realFolder } from "./validate.mjs";
 
-const execFileAsync = promisify(execFile);
 const config = loadConfig();
 const docker = createDocker({ socketPath: config.dockerSocket });
 const inspectContainer = (name) => docker.inspect(name);
@@ -66,6 +63,8 @@ writeEnv();
 let outputDir = env[config.outputKey];
 // Shared with the app through its data folder; see identity.mjs.
 let identitySecret = "";
+// False while a named app user has not been resolved yet, so a later request can retry.
+let identitySecretReady = false;
 let controlServer = null;
 
 const configFile =
@@ -366,7 +365,7 @@ async function dataHostPath() {
 /** The folders the app uses, and whether its own user may read and write them. */
 async function access() {
   const container = await inspectContainer(config.container);
-  const user = parseUser(container?.user);
+  const user = await resolveUser(container, docker, config.container);
   if (!user) return { folders: [] };
   const folders = [];
   if (config.dataDir) {
@@ -514,6 +513,10 @@ async function publicHandler(request, response) {
       unauthorized(response, request);
       return;
     }
+    if (config.identityHeaders && identity.user && !identitySecretReady) {
+      await prepareSecret();
+      if (!identitySecretReady) return sendJson(response, 503, { error: "identity-not-ready" });
+    }
     applyIdentity(request.headers, identity, config.identityHeaders, identitySecret);
     const cookie = appCookies(request.headers.cookie);
     if (cookie) {
@@ -573,6 +576,11 @@ async function upgradeHandler(request, socket, head) {
       }
       socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       return;
+    }
+    if (config.identityHeaders && identity.user && !identitySecretReady) {
+      await prepareSecret();
+      if (!identitySecretReady)
+        return socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
     }
     applyIdentity(request.headers, identity, config.identityHeaders, identitySecret);
     const cookie = appCookies(request.headers.cookie);
@@ -726,36 +734,34 @@ async function ensureOutput(value, moveExisting) {
     throw new HttpError(400, "choose a folder below the output volume");
   }
   if (target === outputDir) {
-    return { ...(await status()), moved: [], skipped: [] };
+    return { ...(await status(true)), moved: [], skipped: [] };
   }
-  let host;
-  try {
-    host = await ensureFolder(
-      config.hostRoot,
-      hostPath(target, config.allowedRoot, config.hostRoot),
-    );
-  } catch {
-    throw new HttpError(400, "folder escapes the allowed volume");
-  }
-
   const previous = outputDir;
-  let previousHost;
-  try {
-    previousHost = await realFolder(
-      config.hostRoot,
-      hostPath(previous, config.allowedRoot, config.hostRoot),
-    );
-  } catch (error) {
-    if (error.code !== "ENOENT") throw new HttpError(400, "folder escapes the allowed volume");
-    previousHost = null;
-  }
-  if (previousHost && isInside(previousHost, host)) {
+  if (isInside(previous, target)) {
     throw new HttpError(400, "choose a folder outside the current output folder");
   }
 
   let moved = [];
   let skipped = [];
   await docker.stop(config.container);
+  let host;
+  let previousHost;
+  try {
+    host = await ensureFolder(
+      config.hostRoot,
+      hostPath(target, config.allowedRoot, config.hostRoot),
+    );
+    previousHost = await realFolder(
+      config.hostRoot,
+      hostPath(previous, config.allowedRoot, config.hostRoot),
+    ).catch((error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+  } catch {
+    await docker.start(config.container).catch(() => {});
+    throw new HttpError(400, "folder escapes the allowed volume");
+  }
   try {
     if (moveExisting) {
       ({ moved, skipped } = await moveEntries(previousHost, host));
@@ -777,7 +783,7 @@ async function ensureOutput(value, moveExisting) {
     throw error;
   }
   log("info", "output folder changed", { outputDir, moved: moved.length, skipped: skipped.length });
-  return { ...(await status()), moved, skipped };
+  return { ...(await status(true)), moved, skipped };
 }
 
 // Moves the old output folder's entries to the new one; names that already exist there stay.
@@ -798,7 +804,9 @@ async function moveEntries(from, to) {
         skipped.push(entry);
         continue;
       }
-      await execFileAsync("mv", ["--", source, destination], { timeout: 600_000 });
+      // Both directories are on the same mounted share. Rename the entry itself; never
+      // descend into a destination that became a directory or symlink.
+      await fs.rename(source, destination);
       moved.push(entry);
     }
   } catch (error) {
@@ -811,10 +819,11 @@ async function moveEntries(from, to) {
 
 async function exists(file) {
   try {
-    await fs.access(file);
+    await fs.lstat(file);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
   }
 }
 
@@ -978,14 +987,18 @@ async function startControl(port) {
 }
 
 async function prepareSecret() {
-  if (!config.identityHeaders || !config.dataDir) return;
+  if (!config.identityHeaders || !config.dataDir) {
+    identitySecretReady = true;
+    return;
+  }
   try {
     const container = await inspectContainer(config.container);
-    identitySecret = await ensureSecret(
-      path.posix.join(config.dataDir, ".bridge-secret"),
-      parseUser(container?.user),
-    );
+    const user = await resolveUser(container, docker, config.container);
+    if (!container || (container.user && !/^(root|0)(:|$)/.test(container.user) && !user)) return;
+    identitySecret = await ensureSecret(path.posix.join(config.dataDir, ".bridge-secret"), user);
+    identitySecretReady = true;
   } catch (error) {
+    identitySecretReady = false;
     log("warn", "identity secret could not be prepared", { error: error.message });
   }
 }
