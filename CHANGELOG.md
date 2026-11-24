@@ -16,6 +16,8 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
   numeric `UID:GID` without making settings world-readable.
 - SPKs built with Docker's containerd image store now embed a classic Docker archive, avoiding
   image import errors on older DSM Container Manager builds.
+- SPKs embed only the requested app and bridge tags. Bare image names select only `:latest`;
+  digest and image-ID references must be given a local tag so DSM can start them offline.
 
 ## [0.4.1] - 2026-11-19
 

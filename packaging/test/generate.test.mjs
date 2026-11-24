@@ -71,6 +71,54 @@ test("rejects configs that would build a broken package", () => {
   );
 });
 
+test("bare image names select only latest, including registries with a port", () => {
+  const { values, read } = render({
+    ...minimal,
+    image: "registry.example:5000/team/app",
+    bridgeImage: "my-bridge",
+  });
+  assert.equal(values.image, "registry.example:5000/team/app:latest");
+  assert.equal(values.bridgeImage, "my-bridge:latest");
+  assert.match(read("compose.yml"), /\$\{APP_IMAGE:-registry\.example:5000\/team\/app:latest\}/);
+  assert.match(read("compose.yml"), /\$\{BRIDGE_IMAGE:-my-bridge:latest\}/);
+  assert.match(
+    read("scripts/bridge-env"),
+    /set_env APP_IMAGE "registry\.example:5000\/team\/app:latest"/,
+  );
+  assert.match(read("scripts/bridge-env"), /set_env BRIDGE_IMAGE "my-bridge:latest"/);
+  assert.equal(resolve(minimal, here).config.image, "my-app:test");
+  assert.equal(resolve(minimal, here).config.bridgeImage, "my-app-bridge:spk");
+});
+
+test("the bridge build must not reuse the app image tag, even under an alias", () => {
+  assert.throws(
+    () =>
+      resolve(
+        { ...minimal, image: "my-app", bridgeImage: "docker.io/library/my-app:latest" },
+        here,
+      ),
+    /image and bridgeImage must use distinct tags/,
+  );
+});
+
+test("digest references and image IDs must be given a local tag first", () => {
+  const hash = "a".repeat(64);
+  for (const field of ["image", "bridgeImage"]) {
+    for (const ref of [
+      `registry.example:5000/app@sha256:${hash}`,
+      `app:spk@sha256:${hash}`,
+      `sha256:${hash}`,
+      hash,
+    ]) {
+      assert.throws(
+        () => resolve({ ...minimal, [field]: ref }, here),
+        new RegExp(`${field} must use a local image tag.*tag the image first`),
+      );
+    }
+  }
+  assert.throws(() => resolve({ ...minimal, image: "app:" }, here), /valid image tag/);
+});
+
 test("rejects values that would inject YAML, paths or UI script", () => {
   for (const [field, value, pattern] of [
     ["version", '1.0.0"\n', /version/],

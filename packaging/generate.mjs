@@ -9,6 +9,7 @@ import { parseFileOwner } from "../bridge/src/access.mjs";
 import { protectedCookie } from "../bridge/src/cookies.mjs";
 import { Script } from "node:vm";
 import { prepareImageArchive } from "./image-archive.mjs";
+import { canonicalImageTag, taggedImage } from "./image-reference.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.dirname(here);
@@ -587,18 +588,15 @@ export function resolve(raw, configDir) {
   if (networkMode !== "host" && networkMode !== "bridge") {
     throw new Error("networkMode must be host or bridge");
   }
-  config.image = required(config, "image");
-  for (const [key, value] of [
-    ["image", config.image],
-    ["bridgeImage", config.bridgeImage || `${id}-bridge:spk`],
-  ]) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(String(value))) {
-      throw new Error(`${key} must be an image reference`);
-    }
-  }
+  config.image = taggedImage(required(config, "image"), "image");
   // Per-app tag: packages built from different framework versions must not retag each other's
   // bridge image, which Container Manager would pick up on the next container recreate.
-  config.bridgeImage = config.bridgeImage || `${id}-bridge:spk`;
+  config.bridgeImage = taggedImage(config.bridgeImage ?? `${id}-bridge:spk`, "bridgeImage");
+  if (canonicalImageTag(config.bridgeImage) === canonicalImageTag(config.image)) {
+    throw new Error(
+      "image and bridgeImage must use distinct tags; building the bridge would replace the app image",
+    );
+  }
   const authMode = config.authMode || "token";
   const allowedOrigins = config.allowedOrigins ?? [];
   if (
@@ -1169,7 +1167,7 @@ async function assemblePackage(config, values, archInfo, options, stage) {
     "-o",
     imageTar,
   ]);
-  await prepareImageArchive(imageTar, archInfo.platform, stage);
+  await prepareImageArchive(imageTar, archInfo.platform, stage, [config.image, config.bridgeImage]);
 
   for (const script of fs.readdirSync(path.join(payload, "scripts"))) {
     fs.chmodSync(path.join(payload, "scripts", script), 0o755);

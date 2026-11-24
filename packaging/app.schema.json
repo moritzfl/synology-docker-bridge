@@ -57,7 +57,7 @@
     },
     "image": {
       "type": "string",
-      "description": "Local app image tag to embed."
+      "description": "Local app image tag to embed. A bare name selects :latest only; digest references and image IDs must be given a local tag first."
     },
     "appBuild": {
       "type": "string",
@@ -313,7 +313,8 @@
       "default": 60
     },
     "bridgeImage": {
-      "type": "string"
+      "type": "string",
+      "description": "Local bridge image tag to embed (default: <id>-bridge:spk). A bare name selects :latest only."
     },
     "controlPort": {
       "type": "integer",

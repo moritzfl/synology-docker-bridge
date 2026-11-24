@@ -11,6 +11,11 @@ import { prepareImageArchive } from "../image-archive.mjs";
 const tar = (args) => execFileSync("tar", args, { env: { ...process.env, COPYFILE_DISABLE: "1" } });
 const json = (archive, member) => JSON.parse(tar(["-xOf", archive, member]));
 const digest = (data) => createHash("sha256").update(data).digest("hex");
+const expectedTags = [
+  "docker.io/library/app:spk",
+  "registry.example:5000/team/app:1",
+  "bridge:spk",
+];
 
 function fixture(
   t,
@@ -21,6 +26,8 @@ function fixture(
     badConfig = false,
     missing = false,
     skippable = false,
+    appTags = ["app:spk", "registry.example:5000/team/app:1"],
+    bridgeTags = ["bridge:spk"],
   } = {},
 ) {
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), "test-image-archive-"));
@@ -36,7 +43,7 @@ function fixture(
   const appConfig = { os: "linux", architecture: "arm64", config: { User: "1000" } };
   if (classic) {
     write("app.json", JSON.stringify(appConfig));
-    write("manifest.json", JSON.stringify([{ Config: "app.json", Layers: [] }]));
+    write("manifest.json", JSON.stringify([{ Config: "app.json", Layers: [], RepoTags: appTags }]));
     return { stage, archive: pack("classic.tar") };
   }
 
@@ -81,12 +88,12 @@ function fixture(
       {
         Config: appConfigRef,
         Layers: layerless ? null : [layerRef],
-        RepoTags: ["app:spk", "registry.example:5000/team/app:1"],
+        RepoTags: appTags,
       },
       {
         Config: blob(JSON.stringify(bridgeConfig)),
         Layers: [blob(data), upperLayer, blob(raw)],
-        RepoTags: ["bridge:spk"],
+        RepoTags: bridgeTags,
       },
     ]),
   );
@@ -105,13 +112,13 @@ function fixture(
 test("leaves an already classic Docker archive byte-for-byte unchanged", async (t) => {
   const { archive, stage } = fixture(t, { classic: true });
   const original = fs.readFileSync(archive);
-  await prepareImageArchive(archive, "linux/arm64", stage);
+  await prepareImageArchive(archive, "linux/arm64", stage, expectedTags.slice(0, 2));
   assert.deepEqual(fs.readFileSync(archive), original);
 });
 
 test("converts a containerd save to a classic archive without changing either image", async (t) => {
   const { archive, stage, data, upper, raw, appConfig, bridgeConfig } = fixture(t);
-  await prepareImageArchive(archive, "linux/arm64", stage);
+  await prepareImageArchive(archive, "linux/arm64", stage, expectedTags);
   const members = tar(["-tf", archive]).toString().trim().split("\n");
   assert.ok(!members.some((name) => /^(blobs\/|index\.json$|oci-layout$)/.test(name)));
   const [app, bridge] = json(archive, "manifest.json");
@@ -143,7 +150,7 @@ test("converts a containerd save to a classic archive without changing either im
 
 test("keeps the tags and config of a layerless Docker image with Layers: null", async (t) => {
   const { archive, stage, appConfig } = fixture(t, { layerless: true });
-  await prepareImageArchive(archive, "linux/arm64", stage);
+  await prepareImageArchive(archive, "linux/arm64", stage, expectedTags);
   const [app] = json(archive, "manifest.json");
   assert.deepEqual(app.RepoTags, ["app:spk", "registry.example:5000/team/app:1"]);
   assert.deepEqual(app.Layers, []);
@@ -159,10 +166,13 @@ test(
     const original = fs.readFileSync(archive);
     // Some Node 22 builds return an empty result for a skippable frame and ignore the rest.
     if (zlib.zstdDecompressSync(encodedUpper).equals(upper)) {
-      await prepareImageArchive(archive, "linux/arm64", stage);
+      await prepareImageArchive(archive, "linux/arm64", stage, expectedTags);
       assert.deepEqual(tar(["-xOf", archive, `${digest(upper)}.tar`]), upper);
     } else {
-      await assert.rejects(prepareImageArchive(archive, "linux/arm64", stage), /multi-frame zstd/);
+      await assert.rejects(
+        prepareImageArchive(archive, "linux/arm64", stage, expectedTags),
+        /multi-frame zstd/,
+      );
       assert.deepEqual(fs.readFileSync(archive), original);
     }
   },
@@ -177,8 +187,36 @@ for (const [reason, options, platform, error] of [
   test(`rejects ${reason} without replacing the original archive`, async (t) => {
     const { archive, stage } = fixture(t, options);
     const original = fs.readFileSync(archive);
-    await assert.rejects(prepareImageArchive(archive, platform, stage), error);
+    await assert.rejects(prepareImageArchive(archive, platform, stage, expectedTags), error);
     assert.deepEqual(fs.readFileSync(archive), original);
     assert.ok(!fs.readdirSync(stage).some((name) => name.startsWith("image-archive-")));
   });
 }
+
+for (const [name, appTags, error] of [
+  ["a missing tag", ["app:spk"], /missing registry\.example:5000\/team\/app:1/],
+  ["an extra sibling tag", [...expectedTags.slice(0, 2), "app:extra"], /unexpected app:extra/],
+  ["an untagged image", null, /included an untagged image/],
+  ["an implicit tag in the manifest", ["app"], /image reference without a tag: app/],
+  [
+    "a tag assigned to two images",
+    [...expectedTags.slice(0, 2), "index.docker.io/library/bridge:spk"],
+    /more than one image for tag bridge:spk/,
+  ],
+]) {
+  test(`rejects ${name} before rewriting a Docker archive`, async (t) => {
+    const { archive, stage } = fixture(t, { appTags });
+    const original = fs.readFileSync(archive);
+    await assert.rejects(prepareImageArchive(archive, "linux/arm64", stage, expectedTags), error);
+    assert.deepEqual(fs.readFileSync(archive), original);
+    assert.ok(!fs.readdirSync(stage).some((name) => name.startsWith("image-archive-")));
+  });
+}
+
+test("validates tags in a classic archive too", async (t) => {
+  const { archive, stage } = fixture(t, { classic: true });
+  await assert.rejects(
+    prepareImageArchive(archive, "linux/arm64", stage, expectedTags),
+    /missing bridge:spk/,
+  );
+});

@@ -74,6 +74,10 @@ Docker archives for older Container Manager versions without changing the origin
 Allow extra temporary disk space for uncompressed layers. Zstandard layers need Node.js 22.15
 or later. Use Node.js 26 for Zstandard layers with multiple frames.
 
+Use local image tags for `image` and `bridgeImage`. A bare name embeds only `:latest`, not
+other local tags in that repository. If you pull an image by digest, give it a local tag
+(e.g. `my-app:spk`) before packaging: DSM must be able to start the tagged image offline.
+
 ## App configuration
 
 A minimal config:

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import * as zlib from "node:zlib";
+import { canonicalImageTag, taggedImage } from "./image-reference.mjs";
 
 const blobPath = /^blobs\/sha256\/[a-f0-9]{64}$/;
 const diffIdPattern = /^sha256:([a-f0-9]{64})$/;
@@ -21,6 +22,39 @@ function verifyPlatform(image, label, platform) {
     );
   }
   console.log(`==> ${label}: ${actual}`);
+}
+
+/** Compose uses pull_policy: never, so the archive must load exactly the requested tags. */
+function verifyTags(manifest, tags) {
+  const expected = new Map(tags.map((tag) => [canonicalImageTag(tag), tag]));
+  const found = new Map();
+  const unexpected = new Set();
+  for (const entry of manifest) {
+    if (!Array.isArray(entry.RepoTags) || !entry.RepoTags.length) {
+      throw new Error("docker save included an untagged image; use a local image tag");
+    }
+    for (const tag of entry.RepoTags) {
+      if (taggedImage(tag, "docker save tag") !== tag) {
+        throw new Error(`docker save included an image reference without a tag: ${tag}`);
+      }
+      const key = canonicalImageTag(tag);
+      if (found.has(key) && found.get(key) !== entry) {
+        throw new Error(`docker save included more than one image for tag ${tag}`);
+      }
+      found.set(key, entry);
+      if (!expected.has(key)) unexpected.add(tag);
+    }
+  }
+  const missing = [...expected].filter(([key]) => !found.has(key)).map(([, tag]) => tag);
+  if (missing.length || unexpected.size) {
+    const problems = [
+      missing.length ? `missing ${missing.join(", ")}` : "",
+      unexpected.size ? `unexpected ${[...unexpected].join(", ")}` : "",
+    ].filter(Boolean);
+    throw new Error(
+      `docker save did not export exactly the requested image tags (${problems.join("; ")})`,
+    );
+  }
 }
 
 /** Legacy Docker archives (including Podman's) carry uncompressed layer tar files. */
@@ -74,7 +108,7 @@ async function copyLayer(source, target, diffId) {
  * Keep classic Docker saves unchanged. Newer saves include a Docker manifest, but also OCI
  * metadata that older DSM Container Manager importers may reject.
  */
-export async function prepareImageArchive(archive, platform, stage) {
+export async function prepareImageArchive(archive, platform, stage, tags) {
   const members = new Set(execFileSync("tar", ["-tf", archive], { encoding: "utf8" }).split("\n"));
   if (!members.has("manifest.json")) {
     throw new Error("docker save did not write manifest.json; a Docker image archive is required");
@@ -82,6 +116,7 @@ export async function prepareImageArchive(archive, platform, stage) {
   const manifest = readMember(archive, "manifest.json");
   if (!Array.isArray(manifest) || !manifest.length)
     throw new Error("docker save produced no images");
+  verifyTags(manifest, tags);
   const imageLabel = (entry) => (entry.RepoTags || []).join(", ") || entry.Config;
   if (!members.has("oci-layout") && !members.has("index.json")) {
     for (const entry of manifest)
