@@ -1,4 +1,4 @@
 # Responsive bridge fixture plus /whoami for the identity-header tests.
-FROM nginx:alpine@sha256:1bb9390209f866c8c0bf76ba89d3f33a3f6cd6a0e6c1b457af7ee763b9579f41
+FROM nginx:alpine@sha256:b50897d5c7b1aa08067c3d90c5e8b3e47ec4e3c91c91446f67820228f7b41e34
 COPY default.conf /etc/nginx/conf.d/default.conf
 COPY index.html /usr/share/nginx/html/index.html
