@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { parseFileOwner } from "../bridge/src/access.mjs";
 import { protectedCookie } from "../bridge/src/cookies.mjs";
 import { Script } from "node:vm";
 
@@ -428,7 +429,7 @@ function parseConfigFile(value) {
   const config = typeof value === "string" ? { path: value } : value;
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     throw new Error(
-      "configFile must be a path in the data folder or { path, check, ready, timeout, label }",
+      "configFile must be a path in the data folder or { path, owner, check, ready, timeout, label }",
     );
   }
   const file = String(config.path || "");
@@ -437,6 +438,9 @@ function parseConfigFile(value) {
     file.split("/").some((part) => part === "..")
   ) {
     throw new Error("configFile path must be a file in the data folder, e.g. settings.yaml");
+  }
+  if (config.owner !== undefined && !parseFileOwner(config.owner)) {
+    throw new Error("configFile owner must be numeric UID:GID, e.g. 1000:1000");
   }
   const check = config.check === undefined ? [] : stringList(config.check, "configFile check");
   const ready = config.ready === undefined ? [] : stringList(config.ready, "configFile ready");
@@ -452,7 +456,7 @@ function parseConfigFile(value) {
     if (text !== undefined && /["\\<>\x00-\x1f\x7f]/.test(text))
       throw new Error("configFile label must be plain text");
   }
-  return { file, check, ready, timeout, label };
+  return { file, owner: config.owner || "", check, ready, timeout, label };
 }
 
 /**
@@ -982,6 +986,7 @@ export function resolve(raw, configDir) {
     updatesUrl: updates ? composeValue(updates.url).slice(1, -1) : "",
     updatesEnabled: updates ? "true" : "false",
     configFile: configFile ? configFile.file : "",
+    configOwner: configFile ? configFile.owner : "",
     configCheck: composeValue(JSON.stringify(configFile ? configFile.check : [])),
     configReady: composeValue(JSON.stringify(configFile ? configFile.ready : [])),
     configTimeout: configFile ? configFile.timeout : 600,

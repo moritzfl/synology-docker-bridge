@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isInside } from "./validate.mjs";
-import { resolveUser } from "./access.mjs";
+import { parseFileOwner, resolveUser } from "./access.mjs";
 import { readPrivateFile, writePrivateFile } from "./private-file.mjs";
 
 export const MAX_BYTES = 256 * 1024;
@@ -37,6 +37,7 @@ export function versionOf(content) {
 export function createConfigFile({
   dir,
   file,
+  owner = "",
   containerDir = "/data",
   check = [],
   ready = [],
@@ -52,6 +53,8 @@ export function createConfigFile({
 }) {
   const target = path.posix.join(dir, file);
   const name = path.posix.basename(file);
+  const configuredOwner = owner ? parseFileOwner(owner) : null;
+  if (owner && !configuredOwner) throw new Error("BRIDGE_CONFIG_OWNER must be numeric UID:GID");
   let job = { state: "idle" };
   // While the app restarts with a new file: what to put back ({ previous, stat, since }).
   let pending = null;
@@ -185,13 +188,8 @@ export function createConfigFile({
       }
       try {
         await handle.writeFile(content);
+        if (stat) await handle.chown(stat.uid, stat.gid);
         await handle.chmod(stat ? stat.mode & 0o777 : 0o600);
-        if (stat) {
-          await handle.chown(stat.uid, stat.gid).catch(() => {});
-        } else {
-          const owner = await appOwner();
-          if (owner) await handle.chown(owner.uid, owner.gid);
-        }
       } catch (error) {
         await handle.close().catch(() => {});
         await fs.rm(at(temporary), { force: true }).catch(() => {});
@@ -204,20 +202,32 @@ export function createConfigFile({
     }
   }
 
-  /** A new file belongs to the app's own user, like the files the app creates. */
-  async function appOwner() {
-    const info = await docker.inspect(container).catch(() => null);
-    return resolveUser(info, docker, container).catch(() => null);
+  /** Never silently write a private root-owned file for an unresolved non-root user. */
+  async function appOwner(info) {
+    if (configuredOwner) return configuredOwner;
+    if (!info) throw new ConfigError(409, "config-owner");
+    if (!info.user || /^(root|0)(:|$)/.test(info.user)) return null;
+    const resolvedOwner = await resolveUser(info, docker, container);
+    if (!resolvedOwner) throw new ConfigError(409, "config-owner");
+    return resolvedOwner;
+  }
+
+  /** Keep existing permissions; repair a private root-owned file left by an older save. */
+  function savedStat(stat, owner) {
+    const readable = stat && stat.mode & (stat.gid === owner?.gid ? 0o044 : 0o004);
+    if (owner && (configuredOwner || !stat || (stat.uid === 0 && !readable))) {
+      return { ...owner, mode: stat?.mode ?? 0o600 };
+    }
+    return stat;
   }
 
   /** Runs the app's own check on the candidate; the app reads it from its data folder. */
-  async function runCheck(content) {
-    if (!check.length) return { ok: true, output: "" };
+  async function runCheck(content, info, owner) {
+    if (!check.length || info?.state !== "running") return { ok: true, output: "" };
     // A random regular file directly in the app's data folder: no directory to chmod or chown,
     // and every write and ownership change happens through an open descriptor. The app can still
     // rename the entry after it is written, but that only breaks its own check; it cannot redirect
     // a root operation at another file.
-    const owner = await appOwner();
     let candidatePath;
     let handle;
     for (let attempt = 0; ; attempt++) {
@@ -243,8 +253,6 @@ export function createConfigFile({
     try {
       const stat = await fs.lstat(candidatePath).catch(() => null);
       if (!stat || !stat.isFile()) throw new ConfigError(409, "not-a-file");
-      const info = await docker.inspect(container);
-      if (info?.state !== "running") return { ok: true, output: "", skipped: true };
       const result = await docker.exec(
         container,
         check.map((arg) => arg.replaceAll("{file}", candidate)),
@@ -365,8 +373,12 @@ export function createConfigFile({
       if (version !== versionOf(before)) throw new ConfigError(409, "changed");
       job = { state: "checking" };
       let result;
+      let replacement;
       try {
-        result = await runCheck(content);
+        const info = !configuredOwner || check.length ? await docker.inspect(container) : null;
+        const owner = await appOwner(info);
+        replacement = savedStat(stat, owner);
+        result = await runCheck(content, info, owner);
       } catch (error) {
         job = { state: "idle" };
         throw error;
@@ -385,7 +397,7 @@ export function createConfigFile({
         restore,
       );
       try {
-        await write(content, stat);
+        await write(content, replacement);
       } catch (error) {
         await remember({ state: "idle" }, null);
         throw error;

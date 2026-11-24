@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,13 +14,14 @@ function fakeDocker({ checkExit = 0, checkOutput = "", crashes = 0, swapCandidat
     crashes,
     execs: [],
     state: "running",
+    user: "",
     startedAt: "t0",
     async inspect() {
       if (docker.dying && Date.now() > docker.dying) {
         docker.dying = 0;
         docker.startedAt = `t${++docker.starts}`;
       }
-      return { state: docker.state, startedAt: docker.startedAt, user: "" };
+      return { state: docker.state, startedAt: docker.startedAt, user: docker.user };
     },
     async restart() {
       docker.restarts++;
@@ -57,10 +59,12 @@ function setup(options = {}, initial = "DEBUG = False\n") {
     fs.writeFileSync(path.join(dir, file), initial);
   }
   const docker = fakeDocker(options);
+  docker.user = options.user || "";
   docker.dir = dir;
   const config = createConfigFile({
     dir,
     file,
+    owner: options.owner,
     containerDir: "/data",
     check: options.noCheck ? [] : ["python", "check.py", "{file}"],
     docker,
@@ -160,6 +164,68 @@ test("a good file is saved, the app restarted, and the check's notes passed on",
   assert.equal(status.state, "applied");
   assert.equal(docker.restarts, 1);
 });
+
+test("an unresolved named user cannot leave a private root-owned settings file", async () => {
+  const { config, dir, docker } = setup({ noCheck: true, user: "app" }, null);
+  docker.state = "exited";
+  await assert.rejects(config.save({ content: "X = 1\n", version: "" }), {
+    code: "config-owner",
+  });
+  assert.deepEqual(fs.readdirSync(dir), []);
+  assert.equal(docker.restarts, 0);
+});
+
+const needsRoot = { skip: process.getuid() !== 0 && "requires chown to another user" };
+
+test(
+  "a private new or legacy root-owned file is readable by the non-root app",
+  needsRoot,
+  async () => {
+    const user = { uid: 1234, gid: 1235 };
+    for (const initial of [null, "DEBUG = False\n"]) {
+      const { config, dir, docker } = setup({ user: "app" }, initial);
+      const file = path.join(dir, "settings.py");
+      fs.chmodSync(dir, 0o755);
+      if (initial) fs.chmodSync(file, 0o600);
+      const inspect = docker.inspect;
+      docker.inspect = async () => ({ ...(await inspect()), pid: 42 });
+      docker.processUser = async () => user;
+      docker.exec = async (_container, command) => {
+        const candidate = path.join(dir, path.basename(command.at(-1)));
+        assert.equal(execFileSync("cat", [candidate], { ...user, encoding: "utf8" }), "X = 1\n");
+        return { exitCode: 0, output: "" };
+      };
+      await config.save({ content: "X = 1\n", version: versionOf(initial) });
+      const stat = fs.statSync(file);
+      assert.equal(stat.uid, user.uid);
+      assert.equal(stat.gid, user.gid);
+      assert.equal(stat.mode & 0o777, 0o600);
+      assert.equal(execFileSync("cat", [file], { ...user, encoding: "utf8" }), "X = 1\n");
+      assert.equal((await settled(config)).state, "applied");
+    }
+  },
+);
+
+test(
+  "an explicit file owner works for a root launcher; rollback restores the original metadata",
+  needsRoot,
+  async () => {
+    const { config, dir, read } = setup({ owner: "1234:1235", user: "0:0", crashes: 1 });
+    const file = path.join(dir, "settings.py");
+    fs.chmodSync(dir, 0o755);
+    fs.chmodSync(file, 0o640);
+    await config.save({ content: "X = 1\n", version: versionOf(read()) });
+    assert.equal(
+      execFileSync("cat", [file], { uid: 1234, gid: 1235, encoding: "utf8" }),
+      "X = 1\n",
+    );
+    assert.equal((await settled(config)).state, "restored");
+    assert.equal(read(), "DEBUG = False\n");
+    const stat = fs.statSync(file);
+    assert.equal(stat.uid, 0);
+    assert.equal(stat.mode & 0o777, 0o640);
+  },
+);
 
 test("if the app does not stay up, the previous file comes back and the app restarts", async () => {
   const { config, docker, read } = setup({ crashes: 1 });

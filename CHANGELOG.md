@@ -9,6 +9,12 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings saves repair private root-owned files for non-root app containers. Packages whose
+  apps start as root and drop privileges can set `configFile.owner` to the settings reader's
+  numeric `UID:GID` without making settings world-readable.
+
 ## [0.4.1] - 2026-11-19
 
 ### Fixed

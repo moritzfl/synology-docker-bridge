@@ -146,6 +146,11 @@
               "type": "string",
               "description": "The file, relative to the data folder, e.g. settings.yaml."
             },
+            "owner": {
+              "type": "string",
+              "pattern": "^[0-9]{1,10}:[0-9]{1,10}$",
+              "description": "Numeric UID:GID of the settings file's reader. Defaults to the app container's user; set this if the app starts as root but reads settings as another user."
+            },
             "check": {
               "type": "array",
               "minItems": 1,

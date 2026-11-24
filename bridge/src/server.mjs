@@ -74,6 +74,7 @@ const configFile =
     ? createConfigFile({
         dir: config.dataDir,
         file: config.configFile,
+        owner: config.configOwner,
         check: config.configCheck,
         ready: config.configReady,
         docker,

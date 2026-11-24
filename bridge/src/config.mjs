@@ -89,6 +89,7 @@ export function loadConfig(env = process.env) {
     dsmHttpsPort: integer(env.BRIDGE_DSM_HTTPS_PORT, 5001),
     // The app's settings file in its data folder, which administrators edit in the window.
     configFile: env.BRIDGE_CONFIG_FILE || "",
+    configOwner: env.BRIDGE_CONFIG_OWNER || "",
     configCheck: list(env.BRIDGE_CONFIG_CHECK),
     configReady: list(env.BRIDGE_CONFIG_READY),
     configSettleSeconds: integer(env.BRIDGE_CONFIG_SETTLE_SECONDS, 30),

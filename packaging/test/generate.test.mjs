@@ -278,6 +278,7 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
     ...minimal,
     configFile: {
       path: "conf/app.yaml",
+      owner: "1000:1001",
       check: ["check", "--file", "{file}"],
       ready: ["probe", "--json"],
       timeout: 1800,
@@ -286,6 +287,7 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
   const compose = read("compose.yml");
   assert.match(compose, /BRIDGE_CONFIG_TIMEOUT_SECONDS: "1800"/);
   assert.match(compose, /BRIDGE_CONFIG_FILE: "conf\/app\.yaml"/);
+  assert.match(compose, /BRIDGE_CONFIG_OWNER: "1000:1001"/);
   const check = /BRIDGE_CONFIG_CHECK: (.*)$/m.exec(compose)[1];
   assert.deepEqual(JSON.parse(JSON.parse(check)), ["check", "--file", "{file}"]);
   const ready = /BRIDGE_CONFIG_READY: (.*)$/m.exec(compose)[1];
@@ -305,6 +307,7 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
 
   const plain = render({ ...minimal, configFile: "settings.json" });
   assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_CHECK: "\[]"/);
+  assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_OWNER: ""/);
   assert.match(plain.read("compose.yml"), /BRIDGE_CONFIG_TIMEOUT_SECONDS: "600"/, "10 minutes");
   for (const timeout of [30, 7201, "1800", 90.5]) {
     assert.throws(
@@ -322,6 +325,9 @@ test("a settings file gets its menu item, its check command and its own CGI", ()
     ".hidden",
     { check: ["x"] },
     { path: "a", check: [] },
+    { path: "a", owner: "app:app" },
+    { path: "a", owner: "1000" },
+    { path: "a", owner: "1000:4294967295" },
   ]) {
     assert.throws(
       () => resolve({ ...minimal, configFile: bad }, here),

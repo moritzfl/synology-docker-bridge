@@ -4,6 +4,14 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+/** Explicit owner for a settings file, even if the app starts as another user. */
+export function parseFileOwner(value) {
+  if (typeof value !== "string" || !/^\d{1,10}:\d{1,10}$/.test(value)) return null;
+  const [uid, gid] = value.split(":").map(Number);
+  // The all-ones value is reserved by chown to mean "do not change this ID".
+  return uid < 0xffffffff && gid < 0xffffffff ? { uid, gid } : null;
+}
+
 /**
  * What a folder allows, checked as the app's own user. DSM's ACLs apply to processes in
  * containers too, so the probe runs as that uid and gid: a folder an administrator can open in

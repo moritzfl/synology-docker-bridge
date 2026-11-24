@@ -59,6 +59,7 @@
     busy: "configBusy",
     "too-large": "configTooLarge",
     "not-a-file": "configNotAFile",
+    "config-owner": "configOwnerUnknown",
   };
 
   // Docker states are not words users should have to learn.

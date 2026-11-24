@@ -303,7 +303,11 @@ app unusable:
 - Someone else saving in the meantime is detected; the editor says so instead of overwriting.
   Files larger than 256 KiB are refused, both when reading and when saving.
 - The file is the app's own: it stays in the data folder across upgrades and can still be edited
-  there directly, without the check.
+  there directly, without the check. New files are private (`0600`) and owned by the app's
+  container user. If the container starts as root but the process reading settings runs as
+  another user, set `configFile.owner` to that user's numeric `UID:GID` (e.g. `"1000:1000"`).
+  This changes ownership on save without widening permissions. For the default owner, the
+  container must be running if Docker specifies a user by name or a UID without a GID.
 
 ## Updates
 
