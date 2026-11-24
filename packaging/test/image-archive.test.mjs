@@ -12,7 +12,17 @@ const tar = (args) => execFileSync("tar", args, { env: { ...process.env, COPYFIL
 const json = (archive, member) => JSON.parse(tar(["-xOf", archive, member]));
 const digest = (data) => createHash("sha256").update(data).digest("hex");
 
-function fixture(t, { classic = false } = {}) {
+function fixture(
+  t,
+  {
+    classic = false,
+    layerless = false,
+    badLayer = false,
+    badConfig = false,
+    missing = false,
+    skippable = false,
+  } = {},
+) {
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), "test-image-archive-"));
   t.after(() => fs.rmSync(stage, { recursive: true, force: true }));
   const directory = path.join(stage, "contents");
@@ -30,9 +40,15 @@ function fixture(t, { classic = false } = {}) {
     return { stage, archive: pack("classic.tar") };
   }
 
-  write("file", "layer contents");
-  const data = tar(["-cf", "-", "-C", directory, "file"]);
-  fs.unlinkSync(path.join(directory, "file"));
+  function makeLayer(content) {
+    write("file", content);
+    const bytes = tar(["-cf", "-", "-C", directory, "file"]);
+    fs.unlinkSync(path.join(directory, "file"));
+    return bytes;
+  }
+  const data = makeLayer("layer contents");
+  const upper = makeLayer("another layer");
+  const raw = makeLayer("uncompressed layer");
   fs.mkdirSync(path.join(directory, "blobs", "sha256"), { recursive: true });
   const blob = (bytes) => {
     const name = `blobs/sha256/${digest(bytes)}`;
@@ -40,8 +56,22 @@ function fixture(t, { classic = false } = {}) {
     return name;
   };
   const layer = blob(zlib.gzipSync(data));
-  const upperLayer = blob(zlib.zstdCompressSync?.(data) ?? data);
-  const bridgeConfig = { ...appConfig, config: { User: "root" } };
+  const zstd = zlib.zstdCompressSync?.(upper);
+  const encodedUpper = skippable
+    ? Buffer.concat([Buffer.from("502a4d1800000000", "hex"), zstd])
+    : zstd;
+  const upperLayer = blob(encodedUpper ?? upper);
+  const layerRef = missing ? `blobs/sha256/${"a".repeat(64)}` : layer;
+  const diff = (bytes) => `sha256:${digest(bytes)}`;
+  const rootfs = (buffers) => ({ type: "layers", diff_ids: buffers.map(diff) });
+  appConfig.rootfs = rootfs(layerless ? [] : [data]);
+  const bridgeConfig = {
+    ...appConfig,
+    config: { User: "root" },
+    rootfs: rootfs([data, badLayer ? raw : upper, raw]),
+  };
+  const appConfigRef = blob(JSON.stringify(appConfig));
+  if (badConfig) write(appConfigRef, JSON.stringify({ ...appConfig, config: { User: "0" } }));
   write("index.json", "{}");
   write("oci-layout", '{"imageLayoutVersion":"1.0.0"}');
   blob("attestation not referenced by the Docker manifest");
@@ -49,18 +79,27 @@ function fixture(t, { classic = false } = {}) {
     "manifest.json",
     JSON.stringify([
       {
-        Config: blob(JSON.stringify(appConfig)),
-        Layers: [layer],
+        Config: appConfigRef,
+        Layers: layerless ? null : [layerRef],
         RepoTags: ["app:spk", "registry.example:5000/team/app:1"],
       },
       {
         Config: blob(JSON.stringify(bridgeConfig)),
-        Layers: [layer, upperLayer],
+        Layers: [blob(data), upperLayer, blob(raw)],
         RepoTags: ["bridge:spk"],
       },
     ]),
   );
-  return { stage, archive: pack("hybrid.tar"), data, appConfig, bridgeConfig };
+  return {
+    stage,
+    archive: pack("hybrid.tar"),
+    data,
+    upper,
+    encodedUpper,
+    raw,
+    appConfig,
+    bridgeConfig,
+  };
 }
 
 test("leaves an already classic Docker archive byte-for-byte unchanged", async (t) => {
@@ -71,7 +110,7 @@ test("leaves an already classic Docker archive byte-for-byte unchanged", async (
 });
 
 test("converts a containerd save to a classic archive without changing either image", async (t) => {
-  const { archive, stage, data, appConfig, bridgeConfig } = fixture(t);
+  const { archive, stage, data, upper, raw, appConfig, bridgeConfig } = fixture(t);
   await prepareImageArchive(archive, "linux/arm64", stage);
   const members = tar(["-tf", archive]).toString().trim().split("\n");
   assert.ok(!members.some((name) => /^(blobs\/|index\.json$|oci-layout$)/.test(name)));
@@ -81,8 +120,11 @@ test("converts a containerd save to a classic archive without changing either im
   assert.deepEqual(json(archive, app.Config), appConfig);
   assert.deepEqual(json(archive, bridge.Config), bridgeConfig);
   assert.equal(app.Layers[0], bridge.Layers[0]);
-  assert.equal(bridge.Layers.length, 2);
-  for (const layer of bridge.Layers) assert.deepEqual(tar(["-xOf", archive, layer]), data);
+  assert.equal(bridge.Layers.length, 3);
+  for (const [index, bytes] of [data, upper, raw].entries()) {
+    assert.equal(bridge.Layers[index], `${digest(bytes)}.tar`);
+    assert.deepEqual(tar(["-xOf", archive, bridge.Layers[index]]), bytes);
+  }
   const repositories = json(archive, "repositories");
   const top = repositories.app.spk;
   assert.equal(repositories["registry.example:5000/team/app"]["1"], top);
@@ -90,19 +132,53 @@ test("converts a containerd save to a classic archive without changing either im
   const unpacked = path.join(stage, "unpacked");
   fs.mkdirSync(unpacked);
   tar(["-xf", archive, "-C", unpacked]);
-  for (const id of [top, repositories.bridge.spk]) {
+  for (const [id, bytes] of [
+    [top, data],
+    [repositories.bridge.spk, raw],
+  ]) {
     assert.equal(fs.readFileSync(path.join(unpacked, id, "VERSION"), "utf8"), "1.0");
-    assert.deepEqual(fs.readFileSync(path.join(unpacked, id, "layer.tar")), data);
+    assert.deepEqual(fs.readFileSync(path.join(unpacked, id, "layer.tar")), bytes);
   }
 });
 
-test("rejects a wrong architecture without replacing the original archive", async (t) => {
-  const { archive, stage } = fixture(t);
-  const original = fs.readFileSync(archive);
-  await assert.rejects(
-    prepareImageArchive(archive, "linux/amd64", stage),
-    /linux\/arm64, not linux\/amd64/,
-  );
-  assert.deepEqual(fs.readFileSync(archive), original);
-  assert.ok(!fs.readdirSync(stage).some((name) => name.startsWith("image-archive-")));
+test("keeps the tags and config of a layerless Docker image with Layers: null", async (t) => {
+  const { archive, stage, appConfig } = fixture(t, { layerless: true });
+  await prepareImageArchive(archive, "linux/arm64", stage);
+  const [app] = json(archive, "manifest.json");
+  assert.deepEqual(app.RepoTags, ["app:spk", "registry.example:5000/team/app:1"]);
+  assert.deepEqual(app.Layers, []);
+  assert.deepEqual(json(archive, app.Config), appConfig);
+  assert.ok(json(archive, "repositories").bridge.spk);
 });
+
+test(
+  "never publishes a truncated layer when the native zstd decoder stops after the first frame",
+  { skip: !zlib.zstdCompressSync },
+  async (t) => {
+    const { archive, stage, upper, encodedUpper } = fixture(t, { skippable: true });
+    const original = fs.readFileSync(archive);
+    // Some Node 22 builds return an empty result for a skippable frame and ignore the rest.
+    if (zlib.zstdDecompressSync(encodedUpper).equals(upper)) {
+      await prepareImageArchive(archive, "linux/arm64", stage);
+      assert.deepEqual(tar(["-xOf", archive, `${digest(upper)}.tar`]), upper);
+    } else {
+      await assert.rejects(prepareImageArchive(archive, "linux/arm64", stage), /multi-frame zstd/);
+      assert.deepEqual(fs.readFileSync(archive), original);
+    }
+  },
+);
+
+for (const [reason, options, platform, error] of [
+  ["a wrong architecture", {}, "linux/amd64", /linux\/arm64, not linux\/amd64/],
+  ["a missing layer", { missing: true }, "linux/arm64", /image archive is missing blob/],
+  ["an incorrect layer digest", { badLayer: true }, "linux/arm64", /does not match sha256:/],
+  ["a changed config", { badConfig: true }, "linux/arm64", /image config digest does not match/],
+]) {
+  test(`rejects ${reason} without replacing the original archive`, async (t) => {
+    const { archive, stage } = fixture(t, options);
+    const original = fs.readFileSync(archive);
+    await assert.rejects(prepareImageArchive(archive, platform, stage), error);
+    assert.deepEqual(fs.readFileSync(archive), original);
+    assert.ok(!fs.readdirSync(stage).some((name) => name.startsWith("image-archive-")));
+  });
+}

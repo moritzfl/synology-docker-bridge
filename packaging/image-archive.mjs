@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import * as zlib from "node:zlib";
 
 const blobPath = /^blobs\/sha256\/[a-f0-9]{64}$/;
+const diffIdPattern = /^sha256:([a-f0-9]{64})$/;
 const digestName = (blob) => path.posix.basename(blob);
 
 function readMember(archive, member) {
@@ -23,25 +24,48 @@ function verifyPlatform(image, label, platform) {
 }
 
 /** Legacy Docker archives (including Podman's) carry uncompressed layer tar files. */
-async function copyLayer(source, target) {
-  const fd = fs.openSync(source, "r");
-  const magic = Buffer.alloc(4);
-  try {
-    fs.readSync(fd, magic);
-  } finally {
-    fs.closeSync(fd);
-  }
+async function copyLayer(source, target, diffId) {
   let decompress;
-  if (magic[0] === 0x1f && magic[1] === 0x8b) {
-    decompress = zlib.createGunzip();
-  } else if (magic.readUInt32BE() === 0x28b52ffd) {
-    if (!zlib.createZstdDecompress)
-      throw new Error("zstd image layers require Node.js 22.15 or later");
-    decompress = zlib.createZstdDecompress();
+  let usesZstd = false;
+  if (digestName(source) !== diffId) {
+    const fd = fs.openSync(source, "r");
+    const magic = Buffer.alloc(4);
+    try {
+      fs.readSync(fd, magic);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const marker = magic.readUInt32LE();
+    if (magic[0] === 0x1f && magic[1] === 0x8b) {
+      decompress = zlib.createGunzip();
+    } else if (marker === 0xfd2fb528 || marker >>> 4 === 0x0184d2a5) {
+      // The stream can start with a Zstandard skippable frame.
+      if (!zlib.createZstdDecompress)
+        throw new Error("zstd image layers require Node.js 22.15 or later");
+      decompress = zlib.createZstdDecompress();
+      usesZstd = true;
+    }
+  }
+  // DiffIDs identify the uncompressed tar stream, independent of how Docker stored each blob.
+  async function* verified(input) {
+    const hash = createHash("sha256");
+    for await (const chunk of input) {
+      hash.update(chunk);
+      yield chunk;
+    }
+    if (hash.digest("hex") !== diffId) {
+      const hint = usesZstd ? "; if using Node.js 22, try Node.js 26 for multi-frame zstd" : "";
+      throw new Error(
+        `image layer ${path.basename(source)} does not match sha256:${diffId}${hint}`,
+      );
+    }
   }
   if (decompress) {
-    await pipeline(fs.createReadStream(source), decompress, fs.createWriteStream(target));
+    await pipeline(fs.createReadStream(source), decompress, verified, fs.createWriteStream(target));
   } else {
+    for await (const _ of verified(fs.createReadStream(source))) {
+      // Verify without making a second copy of the uncompressed layer.
+    }
     fs.linkSync(source, target);
   }
 }
@@ -51,15 +75,15 @@ async function copyLayer(source, target) {
  * metadata that older DSM Container Manager importers may reject.
  */
 export async function prepareImageArchive(archive, platform, stage) {
-  const members = execFileSync("tar", ["-tf", archive], { encoding: "utf8" }).split("\n");
-  if (!members.includes("manifest.json")) {
+  const members = new Set(execFileSync("tar", ["-tf", archive], { encoding: "utf8" }).split("\n"));
+  if (!members.has("manifest.json")) {
     throw new Error("docker save did not write manifest.json; a Docker image archive is required");
   }
   const manifest = readMember(archive, "manifest.json");
   if (!Array.isArray(manifest) || !manifest.length)
     throw new Error("docker save produced no images");
   const imageLabel = (entry) => (entry.RepoTags || []).join(", ") || entry.Config;
-  if (!members.includes("oci-layout") && !members.includes("index.json")) {
+  if (!members.has("oci-layout") && !members.has("index.json")) {
     for (const entry of manifest)
       verifyPlatform(readMember(archive, entry.Config), imageLabel(entry), platform);
     return;
@@ -68,9 +92,16 @@ export async function prepareImageArchive(archive, platform, stage) {
   console.log("==> converting OCI image archive to classic Docker format for DSM");
   const work = fs.mkdtempSync(path.join(stage, "image-archive-"));
   try {
-    const blobs = new Set(manifest.flatMap((entry) => [entry.Config, ...entry.Layers]));
+    const entries = manifest.map((entry) => {
+      // docker save writes null for an image with no filesystem layers.
+      const layers = entry.Layers ?? [];
+      if (!Array.isArray(layers)) throw new Error(`invalid layers for ${imageLabel(entry)}`);
+      return { ...entry, Layers: layers };
+    });
+    const blobs = new Set(entries.flatMap((entry) => [entry.Config, ...entry.Layers]));
     for (const blob of blobs) {
       if (!blobPath.test(blob)) throw new Error(`unexpected image archive blob path: ${blob}`);
+      if (!members.has(blob)) throw new Error(`image archive is missing blob: ${blob}`);
     }
     execFileSync("tar", ["-xf", archive, "-C", work, "--", ...blobs]);
     for (const blob of blobs) {
@@ -85,22 +116,37 @@ export async function prepareImageArchive(archive, platform, stage) {
     const configs = new Map();
     const layers = new Set();
     const legacyLayers = new Set();
-    for (const entry of manifest) {
+    for (const entry of entries) {
       const { Config, Layers, RepoTags } = entry;
       const configFile = `${digestName(Config)}.json`;
       if (!configs.has(Config)) {
-        fs.linkSync(path.join(work, Config), path.join(classic, configFile));
-        configs.set(Config, JSON.parse(fs.readFileSync(path.join(classic, configFile), "utf8")));
+        const source = path.join(work, Config);
+        const config = fs.readFileSync(source);
+        if (createHash("sha256").update(config).digest("hex") !== digestName(Config)) {
+          throw new Error(`${imageLabel(entry)}: image config digest does not match ${Config}`);
+        }
+        fs.linkSync(source, path.join(classic, configFile));
+        configs.set(Config, JSON.parse(config));
       }
       const image = configs.get(Config);
       verifyPlatform(image, imageLabel(entry), platform);
+      const diffIds = image.rootfs?.diff_ids ?? [];
+      if (
+        image.rootfs?.type !== "layers" ||
+        !Array.isArray(diffIds) ||
+        diffIds.length !== Layers.length
+      ) {
+        throw new Error(`${imageLabel(entry)}: image config does not describe the manifest layers`);
+      }
       let parent = "";
       const layerFiles = [];
       for (const [index, blob] of Layers.entries()) {
-        const layerFile = `${digestName(blob)}.tar`;
-        if (!layers.has(blob)) {
-          await copyLayer(path.join(work, blob), path.join(classic, layerFile));
-          layers.add(blob);
+        const diffId = diffIdPattern.exec(diffIds[index])?.[1];
+        if (!diffId) throw new Error(`${imageLabel(entry)}: invalid layer digest`);
+        const layerFile = `${diffId}.tar`;
+        if (!layers.has(diffId)) {
+          await copyLayer(path.join(work, blob), path.join(classic, layerFile), diffId);
+          layers.add(diffId);
         }
         layerFiles.push(layerFile);
 
@@ -108,7 +154,7 @@ export async function prepareImageArchive(archive, platform, stage) {
         // shared between the two images. The top layer ID also includes the image config.
         const top = index === Layers.length - 1;
         const id = createHash("sha256")
-          .update(JSON.stringify([parent, blob, top ? Config : ""]))
+          .update(JSON.stringify([parent, diffId, top ? Config : ""]))
           .digest("hex");
         if (!legacyLayers.has(id)) {
           const dir = path.join(classic, id);

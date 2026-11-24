@@ -68,9 +68,11 @@ node packaging/generate.mjs --config examples/nginx/app.json
 The result is `packaging/dist/dsm-nginx-demo-<version>-x86_64.spk`. Install it through
 **Package Center → Manual Install**, start it, and open the desktop icon.
 
-The generator converts Docker saves that contain OCI metadata to classic Docker archives for
-compatibility with older Container Manager versions. Allow extra temporary disk space for the
-uncompressed image layers during the build.
+Docker builds the images for the requested platform; the generator packages them, including
+when you supply prebuilt images. It converts Docker saves that contain OCI metadata to classic
+Docker archives for older Container Manager versions without changing the original images.
+Allow extra temporary disk space for uncompressed layers. Zstandard layers need Node.js 22.15
+or later. Use Node.js 26 for Zstandard layers with multiple frames.
 
 ## App configuration
 
