@@ -14,6 +14,8 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 - Settings saves repair private root-owned files for non-root app containers. Packages whose
   apps start as root and drop privileges can set `configFile.owner` to the settings reader's
   numeric `UID:GID` without making settings world-readable.
+- SPKs built with Docker's containerd image store now embed a classic Docker archive, avoiding
+  image import errors on older DSM Container Manager builds.
 
 ## [0.4.1] - 2026-11-19
 

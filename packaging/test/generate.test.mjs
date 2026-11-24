@@ -818,9 +818,10 @@ test("a failed archive write preserves the previous SPK and cleans up", (t) => {
 test(
   "builds a complete SPK from a prebuilt image",
   { skip: !process.env.GENERATE_BUILD_TEST },
-  () => {
+  (t) => {
     // Opt-in: needs Docker and the demo images. GENERATE_BUILD_TEST=1 npm test
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "generate-build-"));
+    t.after(() => fs.rmSync(out, { recursive: true, force: true }));
     execFileSync(
       process.execPath,
       [
@@ -834,6 +835,18 @@ test(
       ],
       { stdio: "ignore" },
     );
-    assert.ok(fs.readdirSync(out).some((file) => file.endsWith(".spk")));
+    const file = fs.readdirSync(out).find((file) => file.endsWith(".spk"));
+    assert.ok(file, "the generator produced an SPK");
+    execFileSync("tar", ["-xf", path.join(out, file), "-C", out, "package.tgz"]);
+    execFileSync("tar", ["-xzf", path.join(out, "package.tgz"), "-C", out, "image.tar"]);
+    const archive = path.join(out, "image.tar");
+    const members = execFileSync("tar", ["-tf", archive], { encoding: "utf8" }).split("\n");
+    assert.ok(members.includes("repositories"));
+    assert.ok(!members.includes("oci-layout") && !members.includes("index.json"));
+    const manifest = JSON.parse(execFileSync("tar", ["-xOf", archive, "manifest.json"]));
+    assert.deepEqual(manifest.flatMap((entry) => entry.RepoTags || []).sort(), [
+      "dsm-nginx-demo-bridge:spk",
+      "dsm-nginx-demo:spk",
+    ]);
   },
 );

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseFileOwner } from "../bridge/src/access.mjs";
 import { protectedCookie } from "../bridge/src/cookies.mjs";
 import { Script } from "node:vm";
+import { prepareImageArchive } from "./image-archive.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.dirname(here);
@@ -488,27 +489,6 @@ function parseUpdates(value, image) {
 /** The app runs as the package's own DSM user, so DSM permissions decide what it may access. */
 export function packageUser(config) {
   return config.appUser === "package";
-}
-
-/** Fails the build when an embedded image is not for the package's platform. */
-function verifyPlatform(imageTar, platform, stage) {
-  const [os_, architecture] = platform.split("/");
-  const dir = fs.mkdtempSync(path.join(stage, "verify-"));
-  execFileSync("tar", ["-xf", imageTar, "-C", dir, "manifest.json"]);
-  const manifest = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
-  for (const entry of manifest) {
-    execFileSync("tar", ["-xf", imageTar, "-C", dir, entry.Config]);
-    const image = JSON.parse(fs.readFileSync(path.join(dir, entry.Config), "utf8"));
-    const tags = (entry.RepoTags || []).join(", ") || entry.Config;
-    if (image.os !== os_ || image.architecture !== architecture) {
-      throw new Error(
-        `${tags} is ${image.os}/${image.architecture}, not ${platform}; ` +
-          `pull or build it with --platform ${platform}`,
-      );
-    }
-    console.log(`==> ${tags}: ${image.os}/${image.architecture}`);
-  }
-  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 function run(command, args, options = {}) {
@@ -1059,7 +1039,7 @@ function check(config, values, archInfo) {
   }
 }
 
-function main() {
+async function main() {
   const options = parseArgs(process.argv.slice(2));
   const configPath = path.resolve(options.config);
   const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -1096,7 +1076,7 @@ function main() {
 
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), "dsm-bridge-"));
   try {
-    assemblePackage(config, values, archInfo, options, stage);
+    await assemblePackage(config, values, archInfo, options, stage);
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
   }
@@ -1114,7 +1094,7 @@ export function publishPackage(output, write) {
   }
 }
 
-function assemblePackage(config, values, archInfo, options, stage) {
+async function assemblePackage(config, values, archInfo, options, stage) {
   const { id, version } = values;
   const payload = path.join(stage, "payload");
   const pkg = path.join(stage, "spk");
@@ -1189,7 +1169,7 @@ function assemblePackage(config, values, archInfo, options, stage) {
     "-o",
     imageTar,
   ]);
-  verifyPlatform(imageTar, archInfo.platform, stage);
+  await prepareImageArchive(imageTar, archInfo.platform, stage);
 
   for (const script of fs.readdirSync(path.join(payload, "scripts"))) {
     fs.chmodSync(path.join(payload, "scripts", script), 0o755);
@@ -1244,7 +1224,7 @@ function assemblePackage(config, values, archInfo, options, stage) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    main();
+    await main();
   } catch (error) {
     console.error(`generate: ${error.message}`);
     process.exit(1);

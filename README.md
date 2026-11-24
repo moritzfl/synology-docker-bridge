@@ -68,6 +68,10 @@ node packaging/generate.mjs --config examples/nginx/app.json
 The result is `packaging/dist/dsm-nginx-demo-<version>-x86_64.spk`. Install it through
 **Package Center → Manual Install**, start it, and open the desktop icon.
 
+The generator converts Docker saves that contain OCI metadata to classic Docker archives for
+compatibility with older Container Manager versions. Allow extra temporary disk space for the
+uncompressed image layers during the build.
+
 ## App configuration
 
 A minimal config:
