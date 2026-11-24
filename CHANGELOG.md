@@ -9,15 +9,17 @@ Versions up to 0.2.0 were not released on their own; AirPlay Capture 2.0.0 ships
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-24
+
 ### Fixed
 
 - Settings saves repair private root-owned files for non-root app containers. Packages whose
   apps start as root and drop privileges can set `configFile.owner` to the settings reader's
   numeric `UID:GID` without making settings world-readable.
-- SPKs built with Docker's containerd image store now embed a classic Docker archive, avoiding
-  image import errors on older DSM Container Manager builds.
-- SPKs embed only the requested app and bridge tags. Bare image names select only `:latest`;
-  digest and image-ID references must be given a local tag so DSM can start them offline.
+- SPKs convert Docker exports with OCI metadata to classic Docker archives for compatibility
+  with DSM Container Manager. Only the requested app and bridge tags are embedded; bare names
+  select `:latest` only. Give digest-pinned images and image IDs a local tag before building so
+  DSM can start the images offline.
 
 ## [0.4.1] - 2026-11-19
 
